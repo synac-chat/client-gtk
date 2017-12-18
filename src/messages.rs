@@ -1,4 +1,4 @@
-use chrono::{Datelike, Local, Timelike, TimeZone, Utc};
+use chrono::prelude::*;
 use std::collections::HashMap;
 use std::fmt::Write;
 use synac::common::Message;
@@ -57,9 +57,8 @@ pub fn format(output: &mut String, timestamp: i64) {
     let time  = Utc.timestamp(timestamp, 0);
     let local = time.with_timezone(&Local);
     let now   = Local::now();
-    let diff  = now.signed_duration_since(local);
 
-    match diff.num_days() {
+    match now.num_days_from_ce() - local.num_days_from_ce() {
         0 => output.push_str("Today"),
         1 => output.push_str("Yesterday"),
         2 => output.push_str("Two days ago"),
