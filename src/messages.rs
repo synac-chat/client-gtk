@@ -19,7 +19,7 @@ impl Messages {
             Ok(mut i) => {
                 let original_timestamp = Some(messages[i].timestamp);
                 let original_id = Some(messages[i].id);
-                while messages.get(i-1).map(|msg| msg.timestamp) == original_timestamp {
+                while i > 0 && messages.get(i-1).map(|msg| msg.timestamp) == original_timestamp {
                     i -= 1;
                 }
                 loop {

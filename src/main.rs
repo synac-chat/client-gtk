@@ -24,6 +24,7 @@ use gtk::{
     MessageDialog,
     MessageType,
     Orientation,
+    PositionType,
     ResponseType,
     ScrolledWindow,
     Separator,
@@ -156,6 +157,35 @@ fn main() {
     messages.set_vexpand(true);
     let scroll = ScrolledWindow::new(None, None);
     scroll.add(&messages);
+
+    scroll.get_vadjustment().unwrap().connect_changed(move |vadjustment| {
+        let upper = vadjustment.get_upper() - vadjustment.get_page_size();
+        if vadjustment.get_value() + 100.0 >= upper {
+            vadjustment.set_value(upper);
+        }
+    });
+    let connections_clone = Arc::clone(&connections);
+    scroll.connect_edge_reached(move |_, pos| {
+        if pos != PositionType::Top {
+            return;
+        }
+        if let Some(addr) = *connections_clone.current_server.lock().unwrap() {
+            connections_clone.execute(addr, |result| {
+                if let Ok(synac) = result {
+                    if let Some(channel) = synac.channel {
+                        if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
+                            after: None,
+                            before: synac.messages.get(channel).first().map(|msg| msg.id),
+                            channel: channel,
+                            limit: common::LIMIT_BULK
+                        })) {
+                            eprintln!("error sending packet: {}", err);
+                        }
+                    }
+                }
+            });
+        }
+    });
     content.add(&scroll);
 
     let input = Entry::new();
@@ -197,9 +227,9 @@ fn main() {
 
     let add_server_ok = Button::new_with_label("Ok");
 
-    let db_clone = Rc::clone(&db);
     let channels_clone = channels.clone();
     let connections_clone = Arc::clone(&connections);
+    let db_clone = Rc::clone(&db);
     let main_clone  = main.clone();
     let messages_clone = messages.clone();
     let server_name_clone = server_name.clone();
@@ -280,6 +310,7 @@ fn main() {
                 render_messages(Some((&connections, addr)), &messages_clone);
             }
         }
+
         Continue(true)
     });
     gtk::main();
