@@ -498,6 +498,8 @@ fn render_channels(connection: Option<(&Arc<Connections>, SocketAddr)>, channels
                 }
             }
         });
+    } else {
+        render_messages(None, &messages);
     }
 
     channels.show_all();
