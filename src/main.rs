@@ -9,6 +9,7 @@ extern crate xdg;
 mod connections;
 mod messages;
 
+use failure::Error;
 use gdk::Screen;
 use gtk::prelude::*;
 use gtk::{
@@ -45,6 +46,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 use synac::common::{self, Packet};
 use xdg::BaseDirectories;
+
+#[derive(Debug, Fail)]
+#[fail(display = "sadly GTK+ doesn't support unicode paths")]
+struct UnicodePathError;
 
 fn main() {
     let basedirs = match BaseDirectories::with_prefix("synac") {
@@ -285,7 +290,18 @@ fn main() {
         None => eprintln!("error: no default screen"),
         Some(screen) => {
             let css = CssProvider::new();
-            css.load_from_data(include_bytes!("main.css")).unwrap();
+            let result: Result<(), Error> = if let Some(file) = basedirs.find_config_file("style.css") {
+                if let Some(s) = file.to_str() {
+                    css.load_from_path(s).map_err(Error::from)
+                } else {
+                    Err(UnicodePathError.into())
+                }
+            } else {
+                css.load_from_data(include_bytes!("style.css")).map_err(Error::from)
+            };
+            if let Err(err) = result {
+                alert(&window, MessageType::Error, &err.to_string());
+            }
             StyleContext::add_provider_for_screen(&screen, &css, STYLE_PROVIDER_PRIORITY_APPLICATION);
         }
     }
