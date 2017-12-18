@@ -26,7 +26,7 @@ pub struct Synac {
     pub listener: Listener,
     pub state: State,
 
-    pub channel: Option<usize>,
+    pub current_channel: Option<usize>,
     pub messages: Messages
 }
 impl Synac {
@@ -37,7 +37,7 @@ impl Synac {
             session: session,
             state: State::new(),
 
-            channel: None,
+            current_channel: None,
             messages: Messages::new()
         }
     }
