@@ -52,6 +52,22 @@ use xdg::BaseDirectories;
 #[fail(display = "sadly GTK+ doesn't support unicode paths")]
 struct UnicodePathError;
 
+struct App {
+    connections: Arc<Connections>,
+    db: Rc<SqlConnection>,
+
+    channel_name: Label,
+    channels: GtkBox,
+    messages: GtkBox,
+    messages_scroll: ScrolledWindow,
+    server_name: Label,
+    servers: GtkBox,
+    stack: Stack,
+    stack_add_server: GtkBox,
+    stack_main: GtkBox,
+    window: Window
+}
+
 fn main() {
     let basedirs = match BaseDirectories::with_prefix("synac") {
         Ok(basedirs) => basedirs,
@@ -72,7 +88,6 @@ fn main() {
             return;
         }
     };
-    let db = Rc::new(db);
     db.execute("CREATE TABLE IF NOT EXISTS data (
                     key     TEXT NOT NULL UNIQUE,
                     value   TEXT NOT NULL
@@ -107,33 +122,35 @@ fn main() {
         return;
     }
 
-    let connections = Connections::new(&db, nick);
-
     let window = Window::new(WindowType::Toplevel);
     window.set_title("Synac GTK+ client");
     window.set_default_size(1000, 700);
 
-    let stack = Stack::new();
-    let main = GtkBox::new(Orientation::Horizontal, 10);
+    let app = Rc::new(App {
+        channel_name: Label::new(""),
+        channels: GtkBox::new(Orientation::Vertical, 2),
+        connections: Connections::new(&db, nick),
+        db: Rc::new(db),
+        messages: GtkBox::new(Orientation::Vertical, 2),
+        messages_scroll: ScrolledWindow::new(None, None),
+        server_name: Label::new(""),
+        servers: GtkBox::new(Orientation::Vertical, 2),
+        stack: Stack::new(),
+        stack_add_server: GtkBox::new(Orientation::Vertical, 2),
+        stack_main: GtkBox::new(Orientation::Horizontal, 10),
+        window: window.clone()
+    });
 
     let servers_wrapper = GtkBox::new(Orientation::Vertical, 0);
 
-    let user_name = Label::new(&**connections.nick.read().unwrap());
+    let user_name = Label::new(&**app.connections.nick.read().unwrap());
     user_name.set_property_margin(10);
     servers_wrapper.add(&user_name);
 
     servers_wrapper.add(&Separator::new(Orientation::Vertical));
 
-    // Are used in the future, but needed right now
-    let server_name = Label::new("");
-    let channels = GtkBox::new(Orientation::Vertical, 2);
-    let channel_name = Label::new("");
-    let messages = GtkBox::new(Orientation::Vertical, 2);
-    // end
-
-    let servers = GtkBox::new(Orientation::Vertical, 2);
-    render_servers(&connections, &db, &servers, &server_name, &channels, &channel_name, &messages, &window);
-    servers_wrapper.add(&servers);
+    render_servers(&app);
+    servers_wrapper.add(&app.servers);
 
     let add = Button::new_with_label("Add...");
     add.set_valign(Align::End);
@@ -141,48 +158,47 @@ fn main() {
 
     servers_wrapper.add(&add);
 
-    main.add(&servers_wrapper);
+    app.stack_main.add(&servers_wrapper);
 
-    main.add(&Separator::new(Orientation::Horizontal));
+    app.stack_main.add(&Separator::new(Orientation::Horizontal));
 
     let channels_wrapper = GtkBox::new(Orientation::Vertical, 0);
 
-    server_name.set_property_margin(10);
-    channels_wrapper.add(&server_name);
+    app.server_name.set_property_margin(10);
+    channels_wrapper.add(&app.server_name);
 
     channels_wrapper.add(&Separator::new(Orientation::Vertical));
 
-    channels_wrapper.add(&channels);
+    channels_wrapper.add(&app.channels);
 
-    main.add(&channels_wrapper);
+    app.stack_main.add(&channels_wrapper);
 
-    main.add(&Separator::new(Orientation::Horizontal));
+    app.stack_main.add(&Separator::new(Orientation::Horizontal));
 
     let content = GtkBox::new(Orientation::Vertical, 2);
 
-    channel_name.set_property_margin(10);
-    content.add(&channel_name);
+    app.channel_name.set_property_margin(10);
+    content.add(&app.channel_name);
 
     content.add(&Separator::new(Orientation::Vertical));
 
-    messages.set_vexpand(true);
-    messages.set_valign(Align::Center);
-    let scroll = ScrolledWindow::new(None, None);
-    scroll.add(&messages);
+    app.messages.set_vexpand(true);
+    app.messages.set_valign(Align::Center);
+    app.messages_scroll.add(&app.messages);
 
-    scroll.get_vadjustment().unwrap().connect_changed(move |vadjustment| {
+    app.messages_scroll.get_vadjustment().unwrap().connect_changed(move |vadjustment| {
         let upper = vadjustment.get_upper() - vadjustment.get_page_size();
         if vadjustment.get_value() + 100.0 >= upper {
             vadjustment.set_value(upper);
         }
     });
-    let connections_clone = Arc::clone(&connections);
-    scroll.connect_edge_reached(move |_, pos| {
+    let app_clone = Rc::clone(&app);
+    app.messages_scroll.connect_edge_reached(move |_, pos| {
         if pos != PositionType::Top {
             return;
         }
-        if let Some(addr) = *connections_clone.current_server.lock().unwrap() {
-            connections_clone.execute(addr, |result| {
+        if let Some(addr) = *app_clone.connections.current_server.lock().unwrap() {
+            app_clone.connections.execute(addr, |result| {
                 if let Ok(synac) = result {
                     if let Some(channel) = synac.current_channel {
                         if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
@@ -198,27 +214,21 @@ fn main() {
             });
         }
     });
-    content.add(&scroll);
+    content.add(&app.messages_scroll);
 
     let input = Entry::new();
     input.set_hexpand(true);
     input.set_placeholder_text("Send a message");
 
-    let channel_name_clone = channel_name.clone();
-    let channels_clone = channels.clone();
-    let connections_clone = Arc::clone(&connections);
-    let db_clone = Rc::clone(&db);
-    let messages_clone = messages.clone();
-    let server_name_clone = server_name.clone();
-    let window_clone = window.clone();
+    let app_clone = Rc::clone(&app);
     input.connect_activate(move |input| {
         let text = input.get_text().unwrap_or_default();
         if text.is_empty() {
             return;
         }
         input.set_sensitive(false);
-        if let Some(addr) = *connections_clone.current_server.lock().unwrap() {
-            connections_clone.execute(addr, |result| {
+        if let Some(addr) = *app_clone.connections.current_server.lock().unwrap() {
+            app_clone.connections.execute(addr, |result| {
                 if result.is_err() {
                     return;
                 }
@@ -237,7 +247,7 @@ fn main() {
                         }
                     }
 
-                    let mut stmt = db_clone.prepare("SELECT hash, token FROM servers WHERE ip = ?").unwrap();
+                    let mut stmt = app_clone.db.prepare("SELECT hash, token FROM servers WHERE ip = ?").unwrap();
                     let mut rows = stmt.query(&[&addr.to_string()]).unwrap();
 
                     if let Some(row) = rows.next() {
@@ -246,8 +256,7 @@ fn main() {
                         let hash = row.get(0);
                         let token = row.get(1);
 
-                        connect(addr, &connections_clone, &db_clone, hash, token, &server_name_clone,
-                                &channel_name_clone, &channels_clone, &messages_clone, &window_clone);
+                        connect(&app_clone, addr, hash, token);
                     }
                 }
             });
@@ -258,49 +267,37 @@ fn main() {
 
     content.add(&input);
 
-    main.add(&content);
-    stack.add(&main);
-
-    let add_server = GtkBox::new(Orientation::Vertical, 2);
+    app.stack_main.add(&content);
+    app.stack.add(&app.stack_main);
 
     let name = Entry::new();
     name.set_placeholder_text("Name");
-    add_server.add(&name);
-    add_server.add(&Label::new("The server name. This can be anything you want it to."));
+    app.stack_add_server.add(&name);
+    app.stack_add_server.add(&Label::new("The server name. This can be anything you want it to."));
 
     let server = Entry::new();
     server.set_placeholder_text("Server IP");
-    add_server.add(&server);
-    add_server.add(&Label::new(&*format!("The server IP address. The default port is {}.", common::DEFAULT_PORT)));
+    app.stack_add_server.add(&server);
+    app.stack_add_server.add(&Label::new(&*format!("The server IP address. The default port is {}.", common::DEFAULT_PORT)));
 
     let hash = Entry::new();
     hash.set_placeholder_text("Server's certificate hash");
-    add_server.add(&hash);
-    add_server.add(&Label::new("The server's certificate public key hash.\n\
+    app.stack_add_server.add(&hash);
+    app.stack_add_server.add(&Label::new("The server's certificate public key hash.\n\
                                This is to verify nobody is snooping on your connection"));
 
     let add_server_controls = GtkBox::new(Orientation::Horizontal, 2);
 
     let add_server_cancel = Button::new_with_label("Cancel");
-    let stack_clone = stack.clone();
-    let main_clone  = main.clone();
+    let app_clone = Rc::clone(&app);
     add_server_cancel.connect_clicked(move |_| {
-        stack_clone.set_visible_child(&main_clone);
+        app_clone.stack.set_visible_child(&app_clone.stack_main);
     });
     add_server_controls.add(&add_server_cancel);
 
     let add_server_ok = Button::new_with_label("Ok");
 
-    let channel_name_clone = channel_name.clone();
-    let channels_clone = channels.clone();
-    let connections_clone = Arc::clone(&connections);
-    let db_clone = Rc::clone(&db);
-    let main_clone  = main.clone();
-    let messages_clone = messages.clone();
-    let server_name_clone = server_name.clone();
-    let servers_clone = servers.clone();
-    let stack_clone = stack.clone();
-    let window_clone = window.clone();
+    let app_clone = Rc::clone(&app);
     add_server_ok.connect_clicked(move |_| {
         let name_text   = name.get_text().unwrap_or_default();
         let server_text = server.get_text().unwrap_or_default();
@@ -315,28 +312,25 @@ fn main() {
         server.set_text("");
         hash.set_text("");
 
-        stack_clone.set_visible_child(&main_clone);
+        app_clone.stack.set_visible_child(&app_clone.stack_main);
 
-        db_clone.execute(
+        app_clone.db.execute(
             "INSERT INTO servers (name, ip, hash) VALUES (?, ?, ?)",
             &[&name_text, &addr.to_string(), &hash_text]
         ).unwrap();
-        render_servers(&connections_clone, &db_clone, &servers_clone,
-                       &server_name_clone, &channels_clone, &channel_name_clone,
-                       &messages_clone, &window_clone);
+        render_servers(&app_clone);
     });
     add_server_controls.add(&add_server_ok);
 
-    add_server.add(&add_server_controls);
-    stack.add(&add_server);
+    app.stack_add_server.add(&add_server_controls);
+    app.stack.add(&app.stack_add_server);
 
-    let stack_clone = stack.clone();
-    let add_server = add_server.clone();
+    let app_clone = Rc::clone(&app);
     add.connect_clicked(move |_| {
-        stack_clone.set_visible_child(&add_server);
+        app_clone.stack.set_visible_child(&app_clone.stack_add_server);
     });
 
-    window.add(&stack);
+    window.add(&app.stack);
 
     // Load CSS
     let screen = Screen::get_default();
@@ -366,17 +360,14 @@ fn main() {
         Inhibit(false)
     });
 
-    let channel_name_clone = channel_name.clone();
-    let channels_clone = channels.clone();
-    let messages_clone = messages.clone();
     gtk::idle_add(move || {
         let mut channels = false;
         let mut messages = false;
         let mut addr = None;
 
-        if let Err(err) = connections.try_read(|synac, packet| {
+        if let Err(err) = app.connections.try_read(|synac, packet| {
             println!("received {:?}", packet);
-            if *connections.current_server.lock().unwrap() != Some(synac.addr) {
+            if *app.connections.current_server.lock().unwrap() != Some(synac.addr) {
                 return;
             }
             addr = Some(synac.addr);
@@ -394,9 +385,9 @@ fn main() {
 
         if let Some(addr) = addr {
             if channels {
-                render_channels(Some((&connections, addr)), &channels_clone, &channel_name_clone, &messages_clone);
+                render_channels(Some(addr), &app);
             } else if messages {
-                render_messages(Some((&connections, addr)), &messages_clone);
+                render_messages(Some(addr), &app);
             }
         }
 
@@ -415,15 +406,13 @@ fn alert(window: &Window, kind: MessageType, message: &str) {
     dialog.connect_response(|dialog, _| dialog.destroy());
     dialog.show_all();
 }
-fn connect(addr: SocketAddr, connections: &Arc<Connections>, db: &Rc<SqlConnection>,
-           hash: String, token: Option<String>, server_name: &Label, channel_name: &Label,
-           channels: &GtkBox, messages: &GtkBox, window: &Window)
+fn connect(app: &Rc<App>, addr: SocketAddr, hash: String, token: Option<String>)
     -> Option<Error>
 {
-    let result = connections.connect(addr, hash, token, || {
+    let result = app.connections.connect(addr, hash, token, || {
         let dialog = Dialog::new_with_buttons(
             Some("Synac: Password dialog"),
-            Some(window),
+            Some(&app.window),
             DialogFlags::MODAL,
             &[("Ok", ResponseType::Ok.into())]
         );
@@ -439,32 +428,30 @@ fn connect(addr: SocketAddr, connections: &Arc<Connections>, db: &Rc<SqlConnecti
         dialog.run();
         let text = entry.get_text().unwrap_or_default();
         dialog.destroy();
-        Some((text, Rc::clone(&db)))
+        Some((text, Rc::clone(&app.db)))
     });
     match result {
         Ok(session) => {
             let synac = Synac::new(addr, session);
-            connections.insert(addr, synac);
-            connections.set_current(Some(addr));
-            render_channels(Some((&connections, addr)), channels, &channel_name, &messages);
+            app.connections.insert(addr, synac);
+            app.connections.set_current(Some(addr));
+            render_channels(Some(addr), app);
             None
         },
         Err(err)  => {
-            alert(&window, MessageType::Error, &format!("connection error: {}", err));
-            server_name.set_text("");
-            connections.set_current(None);
-            render_channels(None, &channels, &channel_name, &messages);
+            app.connections.set_current(None);
+            app.server_name.set_text("");
+            alert(&app.window, MessageType::Error, &format!("connection error: {}", err));
+            render_channels(None, app);
             Some(err)
         }
     }
 }
-fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, servers: &GtkBox,
-                  server_name: &Label, channels: &GtkBox, channel_name: &Label,
-                  messages: &GtkBox, window: &Window) {
-    for child in servers.get_children() {
-        servers.remove(&child);
+fn render_servers(app: &Rc<App>) {
+    for child in app.servers.get_children() {
+        app.servers.remove(&child);
     }
-    let mut stmt = db.prepare("SELECT ip, name, hash, token FROM servers ORDER BY name").unwrap();
+    let mut stmt = app.db.prepare("SELECT ip, name, hash, token FROM servers ORDER BY name").unwrap();
     let mut rows = stmt.query(&[]).unwrap();
 
     while let Some(row) = rows.next() {
@@ -477,65 +464,41 @@ fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, server
         let ip_parsed = connections::parse_addr(&addr);
 
         let button = Button::new_with_label(&name);
-        let channel_name_clone = channel_name.clone();
-        let channels_clone = channels.clone();
-        let connections_clone = Arc::clone(connections);
-        let db_clone = Rc::clone(db);
-        let messages_clone = messages.clone();
-        let server_name_clone = server_name.clone();
-        let window_clone = window.clone();
+        let app_clone = Rc::clone(&app);
         button.connect_clicked(move |_| {
             let addr = match ip_parsed {
                 Some(addr) => addr,
                 None => {
-                    alert(&window_clone, MessageType::Error, "Failed to parse IP address. Format: <ip[:port]>");
+                    alert(&app_clone.window, MessageType::Error, "Failed to parse IP address. Format: <ip[:port]>");
                     return;
                 }
             };
             println!("Server with IP {} was clicked", addr);
-            server_name_clone.set_text(&name);
+            app_clone.server_name.set_text(&name);
             let mut ok = false;
-            connections_clone.execute(addr, |result| {
+            app_clone.connections.execute(addr, |result| {
                 ok = result.is_ok();
             });
             if ok {
-                connections_clone.set_current(Some(addr));
-                render_channels(Some((&connections_clone, addr)), &channels_clone, &channel_name_clone,
-                                &messages_clone);
+                app_clone.connections.set_current(Some(addr));
+                render_channels(Some(addr), &app_clone);
             } else {
-                connect(addr, &connections_clone, &db_clone, hash.clone(), token.clone(), &server_name_clone,
-                        &channel_name_clone, &channels_clone, &messages_clone, &window_clone);
+                connect(&app_clone, addr, hash.clone(), token.clone());
             }
         });
 
-        let channel_name_clone = channel_name.clone();
-        let channels_clone = channels.clone();
-        let connections_clone = Arc::clone(connections);
-        let db_clone = Rc::clone(db);
-        let messages_clone = messages.clone();
-        let server_name_clone = server_name.clone();
-        let servers_clone = servers.clone();
-        let window_clone = window.clone();
+        let app_clone = Rc::clone(&app);
         button.connect_button_press_event(move |_, event| {
             if event.get_button() == 3 {
                 let menu = Menu::new();
 
                 let forget = MenuItem::new_with_label("Forget server");
 
-                let channel_name_clone = channel_name_clone.clone();
-                let channels_clone = channels_clone.clone();
-                let connections_clone = Arc::clone(&connections_clone);
-                let db_clone = Rc::clone(&db_clone);
-                let ip_clone = addr.clone();
-                let messages_clone = messages_clone.clone();
-                let server_name_clone = server_name_clone.clone();
-                let servers_clone = servers_clone.clone();
-                let window_clone = window_clone.clone();
+                let app_clone = Rc::clone(&app_clone);
+                let addr_clone = addr.clone();
                 forget.connect_activate(move |_| {
-                    db_clone.execute("DELETE FROM servers WHERE ip = ?", &[&ip_clone.to_string()]).unwrap();
-                    render_servers(&connections_clone, &db_clone, &servers_clone,
-                                   &server_name_clone, &channels_clone, &channel_name_clone,
-                                   &messages_clone, &window_clone);
+                    app_clone.db.execute("DELETE FROM servers WHERE ip = ?", &[&addr_clone]).unwrap();
+                    render_servers(&app_clone);
                 });
                 menu.add(&forget);
 
@@ -544,18 +507,17 @@ fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, server
             }
             Inhibit(false)
         });
-        servers.add(&button);
+        app.servers.add(&button);
     }
-    servers.show_all();
-    servers.queue_draw();
+    app.servers.show_all();
+    app.servers.queue_draw();
 }
-fn render_channels(connection: Option<(&Arc<Connections>, SocketAddr)>, channels: &GtkBox, channel_name: &Label,
-                   messages: &GtkBox) {
-    for child in channels.get_children() {
-        channels.remove(&child);
+fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
+    for child in app.channels.get_children() {
+        app.channels.remove(&child);
     }
-    if let Some((connection, addr)) = connection {
-        connection.execute(addr, |result| {
+    if let Some(addr) = addr {
+        app.connections.execute(addr, |result| {
             if let Ok(server) = result {
                 let mut channel_list: Vec<_> = server.state.channels.values().collect();
                 channel_list.sort_by_key(|channel| &channel.name);
@@ -567,14 +529,13 @@ fn render_channels(connection: Option<(&Arc<Connections>, SocketAddr)>, channels
                     let button = Button::new_with_label(&name);
 
                     let channel_id = channel.id;
-                    let channel_name_clone = channel_name.clone();
-                    let connection_clone = connection.clone();
-                    let messages_clone = messages.clone();
+
+                    let app_clone = Rc::clone(&app);
                     button.connect_clicked(move |_| {
-                        connection_clone.execute(addr, |result| {
+                        app_clone.connections.execute(addr, |result| {
                             if let Ok(synac) = result {
                                 synac.current_channel = Some(channel_id);
-                                channel_name_clone.set_text(&name);
+                                app_clone.channel_name.set_text(&name);
                                 if !synac.messages.has(channel_id) {
                                     if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
                                         after: None,
@@ -587,26 +548,26 @@ fn render_channels(connection: Option<(&Arc<Connections>, SocketAddr)>, channels
                                 }
                             }
                         });
-                        render_messages(Some((&connection_clone, addr)), &messages_clone);
+                        render_messages(Some(addr), &app_clone);
                     });
-                    channels.add(&button);
+                    app.channels.add(&button);
                 }
             }
         });
     } else {
-        channel_name.set_text("");
-        render_messages(None, &messages);
+        app.channel_name.set_text("");
+        render_messages(None, &app);
     }
 
-    channels.show_all();
-    channels.queue_draw();
+    app.channels.show_all();
+    app.channels.queue_draw();
 }
-fn render_messages(connection: Option<(&Arc<Connections>, SocketAddr)>, messages: &GtkBox) {
-    for child in messages.get_children() {
-        messages.remove(&child);
+fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
+    for child in app.messages.get_children() {
+        app.messages.remove(&child);
     }
-    if let Some(connection) = connection {
-        connection.0.execute(connection.1, |result| {
+    if let Some(addr) = addr {
+        app.connections.execute(addr, |result| {
             if let Ok(synac) = result {
                 if let Some(channel) = synac.current_channel {
                     for msg in synac.messages.get(channel) {
@@ -636,14 +597,14 @@ fn render_messages(connection: Option<(&Arc<Connections>, SocketAddr)>, messages
                         text.set_xalign(0.0);
                         msgbox.add(&text);
 
-                        messages.add(&msgbox);
+                        app.messages.add(&msgbox);
 
-                        messages.add(&Separator::new(Orientation::Vertical));
+                        app.messages.add(&Separator::new(Orientation::Vertical));
                     }
                 }
             }
         });
     }
-    messages.show_all();
-    messages.queue_draw();
+    app.messages.show_all();
+    app.messages.queue_draw();
 }
