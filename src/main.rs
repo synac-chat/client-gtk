@@ -1,5 +1,6 @@
 #[macro_use] extern crate failure;
 extern crate chrono;
+extern crate gdk;
 extern crate gtk;
 extern crate rusqlite;
 extern crate synac;
@@ -8,12 +9,14 @@ extern crate xdg;
 mod connections;
 mod messages;
 
+use gdk::Screen;
 use gtk::prelude::*;
 use gtk::{
     Align,
     Box as GtkBox,
     Button,
     ButtonsType,
+    CssProvider,
     Dialog,
     DialogFlags,
     Entry,
@@ -29,6 +32,8 @@ use gtk::{
     ScrolledWindow,
     Separator,
     Stack,
+    StyleContext,
+    STYLE_PROVIDER_PRIORITY_APPLICATION,
     Window,
     WindowType
 };
@@ -272,6 +277,18 @@ fn main() {
     });
 
     window.add(&stack);
+
+    // Load CSS
+    let screen = Screen::get_default();
+    match screen {
+        None => eprintln!("error: no default screen"),
+        Some(screen) => {
+            let css = CssProvider::new();
+            css.load_from_data(include_bytes!("main.css")).unwrap();
+            StyleContext::add_provider_for_screen(&screen, &css, STYLE_PROVIDER_PRIORITY_APPLICATION);
+        }
+    }
+
     window.show_all();
     window.connect_delete_event(|_, _| {
         gtk::main_quit();
