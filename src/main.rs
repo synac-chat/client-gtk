@@ -119,13 +119,14 @@ fn main() {
     servers_wrapper.add(&Separator::new(Orientation::Vertical));
 
     // Are used in the future, but needed right now
-    let channels = GtkBox::new(Orientation::Vertical, 2);
     let server_name = Label::new("");
+    let channels = GtkBox::new(Orientation::Vertical, 2);
+    let channel_name = Label::new("");
     let messages = GtkBox::new(Orientation::Vertical, 2);
     // end
 
     let servers = GtkBox::new(Orientation::Vertical, 2);
-    render_servers(&connections, &db, &servers, &server_name, &channels, &messages, &window);
+    render_servers(&connections, &db, &servers, &server_name, &channels, &channel_name, &messages, &window);
     servers_wrapper.add(&servers);
 
     let add = Button::new_with_label("Add...");
@@ -153,7 +154,6 @@ fn main() {
 
     let content = GtkBox::new(Orientation::Vertical, 2);
 
-    let channel_name = Label::new("Channel 1");
     channel_name.set_property_margin(10);
     content.add(&channel_name);
 
@@ -232,6 +232,7 @@ fn main() {
 
     let add_server_ok = Button::new_with_label("Ok");
 
+    let channel_name_clone = channel_name.clone();
     let channels_clone = channels.clone();
     let connections_clone = Arc::clone(&connections);
     let db_clone = Rc::clone(&db);
@@ -262,8 +263,8 @@ fn main() {
             &[&name_text, &addr.to_string(), &hash_text]
         ).unwrap();
         render_servers(&connections_clone, &db_clone, &servers_clone,
-                       &server_name_clone, &channels_clone, &messages_clone,
-                       &window_clone);
+                       &server_name_clone, &channels_clone, &channel_name_clone,
+                       &messages_clone, &window_clone);
     });
     add_server_controls.add(&add_server_ok);
 
@@ -295,6 +296,7 @@ fn main() {
         Inhibit(false)
     });
 
+    let channel_name_clone = channel_name.clone();
     let channels_clone = channels.clone();
     let messages_clone = messages.clone();
     gtk::idle_add(move || {
@@ -322,7 +324,7 @@ fn main() {
 
         if let Some(addr) = addr {
             if channels {
-                render_channels(Some((&connections, addr)), &channels_clone, &messages_clone);
+                render_channels(Some((&connections, addr)), &channels_clone, &channel_name_clone, &messages_clone);
             } else if messages {
                 render_messages(Some((&connections, addr)), &messages_clone);
             }
@@ -344,7 +346,8 @@ fn alert(window: &Window, kind: MessageType, message: &str) {
     dialog.show_all();
 }
 fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, servers: &GtkBox,
-                  server_name: &Label, channels: &GtkBox, messages: &GtkBox, window: &Window) {
+                  server_name: &Label, channels: &GtkBox, channel_name: &Label,
+                  messages: &GtkBox, window: &Window) {
     for child in servers.get_children() {
         servers.remove(&child);
     }
@@ -361,6 +364,7 @@ fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, server
         let ip_parsed = connections::parse_addr(&addr);
 
         let button = Button::new_with_label(&name);
+        let channel_name_clone = channel_name.clone();
         let channels_clone = channels.clone();
         let connections_clone = Arc::clone(connections);
         let db_clone = Rc::clone(db);
@@ -383,7 +387,8 @@ fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, server
             });
             if ok {
                 connections_clone.set_current(Some(addr));
-                render_channels(Some((&connections_clone, addr)), &channels_clone, &messages_clone);
+                render_channels(Some((&connections_clone, addr)), &channels_clone, &channel_name_clone,
+                                &messages_clone);
             } else {
                 let result = connections_clone.connect(addr, hash.clone(), token.clone(), || {
                     let dialog = Dialog::new_with_buttons(
@@ -411,18 +416,22 @@ fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, server
                         let synac = Synac::new(addr, session);
                         connections_clone.insert(addr, synac);
                         connections_clone.set_current(Some(addr));
-                        render_channels(Some((&connections_clone, addr)), &channels_clone, &messages_clone);
+                        render_channels(Some((&connections_clone, addr)), &channels_clone,
+                                        &channel_name_clone, &messages_clone);
                     },
                     Err(err)  => {
                         alert(&window_clone, MessageType::Error, &format!("connection error: {}", err));
+                        channel_name_clone.set_text("");
                         server_name_clone.set_text("");
                         connections_clone.set_current(None);
-                        render_channels(None, &channels_clone, &messages_clone);
+                        render_channels(None, &channels_clone, &channel_name_clone,
+                                        &messages_clone);
                     }
                 }
             }
         });
 
+        let channel_name_clone = channel_name.clone();
         let channels_clone = channels.clone();
         let connections_clone = Arc::clone(connections);
         let db_clone = Rc::clone(db);
@@ -436,6 +445,7 @@ fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, server
 
                 let forget = MenuItem::new_with_label("Forget server");
 
+                let channel_name_clone = channel_name_clone.clone();
                 let channels_clone = channels_clone.clone();
                 let connections_clone = Arc::clone(&connections_clone);
                 let db_clone = Rc::clone(&db_clone);
@@ -447,8 +457,8 @@ fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, server
                 forget.connect_activate(move |_| {
                     db_clone.execute("DELETE FROM servers WHERE ip = ?", &[&ip_clone.to_string()]).unwrap();
                     render_servers(&connections_clone, &db_clone, &servers_clone,
-                                   &server_name_clone, &channels_clone, &messages_clone,
-                                   &window_clone);
+                                   &server_name_clone, &channels_clone, &channel_name_clone,
+                                   &messages_clone, &window_clone);
                 });
                 menu.add(&forget);
 
@@ -462,7 +472,8 @@ fn render_servers(connections: &Arc<Connections>, db: &Rc<SqlConnection>, server
     servers.show_all();
     servers.queue_draw();
 }
-fn render_channels(connection: Option<(&Arc<Connections>, SocketAddr)>, channels: &GtkBox, messages: &GtkBox) {
+fn render_channels(connection: Option<(&Arc<Connections>, SocketAddr)>, channels: &GtkBox, channel_name: &Label,
+                   messages: &GtkBox) {
     for child in channels.get_children() {
         channels.remove(&child);
     }
@@ -472,14 +483,21 @@ fn render_channels(connection: Option<(&Arc<Connections>, SocketAddr)>, channels
                 let mut channel_list: Vec<_> = server.state.channels.values().collect();
                 channel_list.sort_by_key(|channel| &channel.name);
                 for channel in channel_list {
-                    let button = Button::new_with_label(&channel.name);
+                    let mut name = String::with_capacity(channel.name.len() + 1);
+                    name.push('#');
+                    name.push_str(&channel.name);
+
+                    let button = Button::new_with_label(&name);
+
                     let channel_id = channel.id;
+                    let channel_name_clone = channel_name.clone();
                     let connection_clone = connection.clone();
                     let messages_clone = messages.clone();
                     button.connect_clicked(move |_| {
                         connection_clone.execute(addr, |result| {
                             if let Ok(server) = result {
                                 server.channel = Some(channel_id);
+                                channel_name_clone.set_text(&name);
                                 if !server.messages.has(channel_id) {
                                     if let Err(err) = server.session.send(&Packet::MessageList(common::MessageList {
                                         after: None,
