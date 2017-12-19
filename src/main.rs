@@ -22,6 +22,7 @@ use gtk::{
     Dialog,
     DialogFlags,
     Entry,
+    EventBox,
     InputPurpose,
     Label,
     Menu,
@@ -31,6 +32,8 @@ use gtk::{
     Orientation,
     PositionType,
     ResponseType,
+    Revealer,
+    RevealerTransitionType,
     ScrolledWindow,
     Separator,
     Stack,
@@ -61,6 +64,9 @@ struct App {
 
     channel_name: Label,
     channels: GtkBox,
+    message_edit: Revealer,
+    message_edit_id: RefCell<Option<usize>>,
+    message_edit_input: Entry,
     messages: GtkBox,
     messages_scroll: ScrolledWindow,
     server_name: Label,
@@ -135,6 +141,9 @@ fn main() {
         channels: GtkBox::new(Orientation::Vertical, 2),
         connections: Connections::new(&db, nick),
         db: Rc::new(db),
+        message_edit: Revealer::new(),
+        message_edit_id: RefCell::new(None),
+        message_edit_input: Entry::new(),
         messages: GtkBox::new(Orientation::Vertical, 2),
         messages_scroll: ScrolledWindow::new(None, None),
         server_name: Label::new(""),
@@ -221,6 +230,50 @@ fn main() {
     });
     content.add(&app.messages_scroll);
 
+    app.message_edit.set_transition_type(RevealerTransitionType::SlideUp);
+
+    let message_edit = GtkBox::new(Orientation::Vertical, 2);
+
+    message_edit.add(&Label::new("Edit message"));
+
+    let app_clone = Rc::clone(&app);
+    app.message_edit_input.connect_activate(move |input| {
+        let text = input.get_text().unwrap_or_default();
+        if text.is_empty() {
+            return;
+        }
+        input.set_sensitive(false);
+        if let Some(addr) = *app_clone.connections.current_server.lock().unwrap() {
+            app_clone.connections.execute(addr, |result| {
+                if result.is_err() {
+                    return;
+                }
+                let synac = result.unwrap();
+
+                if let Err(err) = synac.session.send(&Packet::MessageUpdate(common::MessageUpdate {
+                    id: app_clone.message_edit_id.borrow().expect("wait how is this variable not set"),
+                    text: text.into_bytes()
+                })) {
+                    eprintln!("failed to send packet: {}", err);
+                }
+            });
+        }
+        input.set_sensitive(true);
+        app_clone.message_edit.set_reveal_child(false);
+    });
+
+    message_edit.add(&app.message_edit_input);
+
+    let message_edit_cancel = Button::new_with_label("Cancel");
+    let app_clone = Rc::clone(&app);
+    message_edit_cancel.connect_clicked(move |_| {
+        app_clone.message_edit.set_reveal_child(false);
+    });
+    message_edit.add(&message_edit_cancel);
+
+    app.message_edit.add(&message_edit);
+    content.add(&app.message_edit);
+
     let input = Entry::new();
     input.set_hexpand(true);
     input.set_placeholder_text("Send a message");
@@ -301,6 +354,7 @@ fn main() {
     content.add(&app.typing);
 
     app.stack_main.add(&content);
+
     app.stack.add(&app.stack_main);
 
     let name = Entry::new();
@@ -479,6 +533,7 @@ fn connect(app: &Rc<App>, addr: SocketAddr, hash: String, token: Option<String>)
         Ok(synac) => {
             app.connections.insert(addr, synac);
             app.connections.set_current(Some(addr));
+            app.message_edit.set_reveal_child(false);
             render_channels(Some(addr), app);
             None
         },
@@ -486,6 +541,7 @@ fn connect(app: &Rc<App>, addr: SocketAddr, hash: String, token: Option<String>)
             app.connections.set_current(None);
             app.server_name.set_text("");
             alert(&app.window, MessageType::Error, &format!("connection error: {}", err));
+            app.message_edit.set_reveal_child(false);
             render_channels(None, app);
             Some(err)
         }
@@ -525,6 +581,7 @@ fn render_servers(app: &Rc<App>) {
             });
             if ok {
                 app_clone.connections.set_current(Some(addr));
+                app_clone.message_edit.set_reveal_child(false);
                 render_channels(Some(addr), &app_clone);
             } else {
                 connect(&app_clone, addr, hash.clone(), token.clone());
@@ -612,40 +669,71 @@ fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
     }
     if let Some(addr) = addr {
         app.connections.execute(addr, |result| {
-            if let Ok(synac) = result {
-                if let Some(channel) = synac.current_channel {
-                    for msg in synac.messages.get(channel) {
-                        let msgbox = GtkBox::new(Orientation::Vertical, 2);
-                        let authorbox = GtkBox::new(Orientation::Horizontal, 4);
+            if result.is_err() { return; }
+            let synac = result.unwrap();
 
-                        let author = Label::new(&*synac.state.users[&msg.author].name);
-                        author.set_xalign(0.0);
-                        authorbox.add(&author);
+            if synac.current_channel.is_none() { return };
+            let channel = synac.current_channel.unwrap();
 
-                        authorbox.add(&Separator::new(Orientation::Horizontal));
+            for msg in synac.messages.get(channel) {
+                let msgbox = GtkBox::new(Orientation::Vertical, 2);
+                let authorbox = GtkBox::new(Orientation::Horizontal, 4);
 
-                        let mut time = String::with_capacity(32); // just a guess
-                        messages::format(&mut time, msg.timestamp);
-                        if let Some(edit) = msg.timestamp_edit {
-                            time.push_str(" (edited ");
-                            messages::format(&mut time, edit);
-                            time.push_str(")");
-                        }
-                        let time = Label::new(&*time);
-                        time.set_xalign(0.0);
-                        authorbox.add(&time);
+                let author = Label::new(&*synac.state.users[&msg.author].name);
+                author.set_xalign(0.0);
+                authorbox.add(&author);
 
-                        msgbox.add(&authorbox);
+                authorbox.add(&Separator::new(Orientation::Horizontal));
 
-                        let text = Label::new(&*String::from_utf8_lossy(&msg.text));
-                        text.set_xalign(0.0);
-                        msgbox.add(&text);
-
-                        app.messages.add(&msgbox);
-
-                        app.messages.add(&Separator::new(Orientation::Vertical));
-                    }
+                let mut time = String::with_capacity(32); // just a guess
+                messages::format(&mut time, msg.timestamp);
+                if let Some(edit) = msg.timestamp_edit {
+                    time.push_str(" (edited ");
+                    messages::format(&mut time, edit);
+                    time.push(')');
                 }
+                let time = Label::new(&*time);
+                time.set_xalign(0.0);
+                authorbox.add(&time);
+
+                msgbox.add(&authorbox);
+
+                let string = String::from_utf8_lossy(&msg.text).into_owned();
+                let text = Label::new(&*string);
+                text.set_xalign(0.0);
+
+                let event = EventBox::new();
+                event.add(&text);
+
+                let app_clone = Rc::clone(&app);
+                let msg_id = msg.id;
+                event.connect_button_press_event(move |_, event| {
+                    if event.get_button() == 3 {
+                        let menu = Menu::new();
+
+                        let edit = MenuItem::new_with_label("Edit message");
+
+                        let app_clone = Rc::clone(&app_clone);
+                        let string = string.clone();
+                        edit.connect_activate(move |_| {
+                            *app_clone.message_edit_id.borrow_mut() = Some(msg_id);
+                            app_clone.message_edit_input.set_text(&string);
+                            app_clone.message_edit.set_reveal_child(true);
+                        });
+
+                        menu.add(&edit);
+
+                        menu.show_all();
+                        menu.popup_at_pointer(Some(&**event));
+                    }
+                    Inhibit(false)
+                });
+
+                msgbox.add(&event);
+
+                app.messages.add(&msgbox);
+
+                app.messages.add(&Separator::new(Orientation::Vertical));
             }
         });
     }
