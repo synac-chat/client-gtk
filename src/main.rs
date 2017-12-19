@@ -40,11 +40,13 @@ use gtk::{
 };
 use connections::{Connections, Synac};
 use rusqlite::Connection as SqlConnection;
+use std::cell::RefCell;
 use std::env;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use synac::common::{self, Packet};
 use xdg::BaseDirectories;
 
@@ -220,6 +222,32 @@ fn main() {
     input.set_hexpand(true);
     input.set_placeholder_text("Send a message");
 
+    let typing_duration = Duration::from_secs(common::TYPING_TIMEOUT as u64 / 2);
+    let typing_last = RefCell::new(Instant::now());
+
+    let app_clone = Rc::clone(&app);
+    input.connect_property_text_notify(move |input| {
+        let mut typing_last = typing_last.borrow_mut();
+        if typing_last.elapsed() < typing_duration {
+            return;
+        }
+        *typing_last = Instant::now();
+        let text = input.get_text().unwrap_or_default();
+
+        if let Some(addr) = *app_clone.connections.current_server.lock().unwrap() {
+            app_clone.connections.execute(addr, |result| {
+                if let Ok(synac) = result {
+                    if let Some(channel) = synac.current_channel {
+                        if let Err(err) = synac.session.send(&Packet::Typing(common::Typing {
+                            channel: channel
+                        })) {
+                            eprintln!("failed to send packet: {}", err);
+                        }
+                    }
+                }
+            });
+        }
+    });
     let app_clone = Rc::clone(&app);
     input.connect_activate(move |input| {
         let text = input.get_text().unwrap_or_default();
