@@ -45,6 +45,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use synac::common::{self, Packet};
 use xdg::BaseDirectories;
 
@@ -220,6 +221,18 @@ fn main() {
     input.set_hexpand(true);
     input.set_placeholder_text("Send a message");
 
+    let typing_duration = Duration::from_secs(common::TYPING_TIMEOUT as u64 / 2);
+    let mut typing_last = Instant::now();
+
+    let app_clone = Rc::clone(&app);
+    input.connect_property_text_notify(move |input| {
+        if typing_last.elapsed() < typing_duration {
+            return;
+        }
+        typing_last = Instant::now();
+        let text = input.get_text().unwrap_or_default();
+        println!("{:?}", text);
+    });
     let app_clone = Rc::clone(&app);
     input.connect_activate(move |input| {
         let text = input.get_text().unwrap_or_default();
