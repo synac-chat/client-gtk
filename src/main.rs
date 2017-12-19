@@ -8,6 +8,7 @@ extern crate xdg;
 
 mod connections;
 mod messages;
+mod typing;
 
 use failure::Error;
 use gdk::Screen;
@@ -38,7 +39,7 @@ use gtk::{
     Window,
     WindowType
 };
-use connections::{Connections, Synac};
+use connections::Connections;
 use rusqlite::Connection as SqlConnection;
 use std::cell::RefCell;
 use std::env;
@@ -67,6 +68,7 @@ struct App {
     stack: Stack,
     stack_add_server: GtkBox,
     stack_main: GtkBox,
+    typing: Label,
     window: Window
 }
 
@@ -140,6 +142,7 @@ fn main() {
         stack: Stack::new(),
         stack_add_server: GtkBox::new(Orientation::Vertical, 2),
         stack_main: GtkBox::new(Orientation::Horizontal, 10),
+        typing: Label::new(""),
         window: window.clone()
     });
 
@@ -222,17 +225,16 @@ fn main() {
     input.set_hexpand(true);
     input.set_placeholder_text("Send a message");
 
-    let typing_duration = Duration::from_secs(common::TYPING_TIMEOUT as u64 / 2);
+    let typing_duration = Duration::from_secs(common::TYPING_TIMEOUT as u64 / 2); // TODO: const fn
     let typing_last = RefCell::new(Instant::now());
 
     let app_clone = Rc::clone(&app);
-    input.connect_property_text_notify(move |input| {
+    input.connect_property_text_notify(move |_| {
         let mut typing_last = typing_last.borrow_mut();
         if typing_last.elapsed() < typing_duration {
             return;
         }
         *typing_last = Instant::now();
-        let text = input.get_text().unwrap_or_default();
 
         if let Some(addr) = *app_clone.connections.current_server.lock().unwrap() {
             app_clone.connections.execute(addr, |result| {
@@ -294,6 +296,9 @@ fn main() {
     });
 
     content.add(&input);
+
+    app.typing.set_xalign(0.0);
+    content.add(&app.typing);
 
     app.stack_main.add(&content);
     app.stack.add(&app.stack_main);
@@ -393,9 +398,11 @@ fn main() {
         let mut messages = false;
         let mut addr = None;
 
+        let current_server = *app.connections.current_server.lock().unwrap();
+
         if let Err(err) = app.connections.try_read(|synac, packet| {
             println!("received {:?}", packet);
-            if *app.connections.current_server.lock().unwrap() != Some(synac.addr) {
+            if current_server != Some(synac.addr) {
                 return;
             }
             addr = Some(synac.addr);
@@ -403,12 +410,22 @@ fn main() {
                 Packet::ChannelReceive(_)       => channels = true,
                 Packet::ChannelDeleteReceive(_) => channels = true,
                 Packet::MessageReceive(_)       => messages = true,
-                Packet::MessageDeleteReceive(_)       => messages = true,
+                Packet::MessageDeleteReceive(_) => messages = true,
                 _ => {}
             }
         }) {
             eprintln!("receive error: {}", err);
             return Continue(true);
+        }
+
+        if let Some(addr) = current_server {
+            app.connections.execute(addr, |result| {
+                if let Ok(synac) = result {
+                    if let Some(typing) = synac.typing.check(synac.current_channel, &synac.state) {
+                        app.typing.set_text(&typing);
+                    }
+                }
+            });
         }
 
         if let Some(addr) = addr {
@@ -459,8 +476,7 @@ fn connect(app: &Rc<App>, addr: SocketAddr, hash: String, token: Option<String>)
         Some((text, Rc::clone(&app.db)))
     });
     match result {
-        Ok(session) => {
-            let synac = Synac::new(addr, session);
+        Ok(synac) => {
             app.connections.insert(addr, synac);
             app.connections.set_current(Some(addr));
             render_channels(Some(addr), app);

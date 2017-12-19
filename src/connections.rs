@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
 use synac::common::{self, Packet};
 use synac::{Listener, Session, State};
+use typing::Typing;
 
 #[derive(Debug, Fail)]
 pub enum ConnectionError {
@@ -27,10 +28,12 @@ pub struct Synac {
     pub state: State,
 
     pub current_channel: Option<usize>,
-    pub messages: Messages
+    pub messages: Messages,
+    pub typing: Typing,
+    pub user: usize
 }
 impl Synac {
-    pub fn new(addr: SocketAddr, session: Session) -> Self {
+    pub fn new(addr: SocketAddr, session: Session, user: usize) -> Self {
         Synac {
             addr: addr,
             listener: Listener::new(),
@@ -38,7 +41,9 @@ impl Synac {
             state: State::new(),
 
             current_channel: None,
-            messages: Messages::new()
+            messages: Messages::new(),
+            typing: Typing::new(),
+            user: user
         }
     }
 }
@@ -96,7 +101,6 @@ impl Connections {
                 let me_clone = Arc::clone(&me);
                 servers.insert(addr, Connection::Connecting(thread::spawn(move || {
                     me_clone.connect(addr, hash, token, || None)
-                        .map(|session| Synac::new(addr, session))
                         .map_err(|err| { eprintln!("connect error: {}", err); err })
                 })));
             }
@@ -105,7 +109,7 @@ impl Connections {
         me
     }
     pub fn connect<F>(&self, addr: SocketAddr, hash: String, token: Option<String>, password: F)
-        -> Result<Session, Error>
+        -> Result<Synac, Error>
         where F: FnOnce() -> Option<(String, Rc<SqlConnection>)>
     {
         let mut session = Session::new(addr, hash)?;
@@ -113,9 +117,9 @@ impl Connections {
         if let Some(token) = token {
             session.login_with_token(false, self.nick.read().unwrap().clone(), token)?;
             match session.read()? {
-                Packet::LoginSuccess(_) => {
+                Packet::LoginSuccess(login) => {
                     session.set_nonblocking(true)?;
-                    return Ok(session);
+                    return Ok(Synac::new(addr, session, login.id));
                 },
                 Packet::Err(common::ERR_LOGIN_INVALID) => {},
                 _ => return Err(ConnectionError::InvalidPacket.into())
@@ -127,7 +131,7 @@ impl Connections {
                 Packet::LoginSuccess(login) => {
                     db.execute("UPDATE servers SET token = ? WHERE ip = ?", &[&login.token, &addr.to_string()]).unwrap();
                     session.set_nonblocking(true)?;
-                    return Ok(session);
+                    return Ok(Synac::new(addr, session, login.id));
                 },
                 Packet::Err(common::ERR_LOGIN_INVALID) =>
                      return Err(ConnectionError::InvalidPassword.into()),
@@ -163,10 +167,14 @@ impl Connections {
                     let read = synac.listener.try_read(synac.session.inner_stream())?;
                     if let Some(packet) = read {
                         synac.state.update(&packet);
-                        if let Packet::MessageReceive(ref event) = packet {
-                            synac.messages.add(event.inner.clone());
-                        } else if let Packet::MessageDeleteReceive(ref msg) = packet {
-                            synac.messages.remove(msg.id);
+                        match packet {
+                            Packet::MessageReceive(ref event) =>
+                                synac.messages.add(event.inner.clone()),
+                            Packet::MessageDeleteReceive(ref msg) =>
+                                synac.messages.remove(msg.id),
+                            Packet::TypingReceive(ref event) if event.author != synac.user =>
+                                synac.typing.insert(event.author, event.channel),
+                            _ => {}
                         }
                         callback(synac, packet);
                     }
