@@ -74,6 +74,9 @@ struct App {
     stack: Stack,
     stack_add_server: GtkBox,
     stack_main: GtkBox,
+    user_stack: Stack,
+    user_stack_edit: Entry,
+    user_stack_text: EventBox,
     typing: Label,
     window: Window
 }
@@ -151,15 +154,65 @@ fn main() {
         stack: Stack::new(),
         stack_add_server: GtkBox::new(Orientation::Vertical, 2),
         stack_main: GtkBox::new(Orientation::Horizontal, 10),
+        user_stack: Stack::new(),
+        user_stack_edit: Entry::new(),
+        user_stack_text: EventBox::new(),
         typing: Label::new(""),
         window: window.clone()
     });
 
-    let servers_wrapper = GtkBox::new(Orientation::Vertical, 0);
+    app.stack.add(&app.stack_main);
+    app.stack.add(&app.stack_add_server);
+
+    app.user_stack.add(&app.user_stack_text);
+    app.user_stack.add(&app.user_stack_edit);
 
     let user_name = Label::new(&**app.connections.nick.read().unwrap());
+
+    app.user_stack_edit.set_placeholder_text("Nick");
+    let app_clone = Rc::clone(&app);
+    let user_name_clone = user_name.clone();
+    app.user_stack_edit.connect_activate(move |input| {
+        let text = input.get_text().unwrap_or_default();
+        let old = app_clone.connections.nick.read().unwrap();
+        app_clone.user_stack.set_visible_child(&app_clone.user_stack_text);
+        if text.is_empty() || text == *old {
+            return;
+        }
+        user_name_clone.set_text(&text);
+
+        drop(old);
+
+        app_clone.connections.foreach(|synac| {
+            let result = synac.session.send(&Packet::LoginUpdate(common::LoginUpdate {
+                name: Some(text.clone()),
+                password_current: None,
+                password_new: None,
+                reset_token: false
+            }));
+            if let Err(err) = result {
+                alert(&app_clone.window, MessageType::Warning, &err.to_string());
+            }
+        });
+
+        *app_clone.connections.nick.write().unwrap() = text;
+    });
+
+    let servers_wrapper = GtkBox::new(Orientation::Vertical, 0);
+
     user_name.set_property_margin(10);
-    servers_wrapper.add(&user_name);
+
+    app.user_stack_text.add(&user_name);
+
+    let app_clone = Rc::clone(&app);
+    app.user_stack_text.connect_button_press_event(move |_, event| {
+        if event.get_button() == 1 {
+            app_clone.user_stack.set_visible_child(&app_clone.user_stack_edit);
+            app_clone.user_stack_edit.grab_focus();
+        }
+        Inhibit(false)
+    });
+    servers_wrapper.add(&app.user_stack);
 
     servers_wrapper.add(&Separator::new(Orientation::Vertical));
 
@@ -354,8 +407,6 @@ fn main() {
 
     app.stack_main.add(&content);
 
-    app.stack.add(&app.stack_main);
-
     let name = Entry::new();
     name.set_placeholder_text("Name");
     app.stack_add_server.add(&name);
@@ -409,7 +460,6 @@ fn main() {
     add_server_controls.add(&add_server_ok);
 
     app.stack_add_server.add(&add_server_controls);
-    app.stack.add(&app.stack_add_server);
 
     let app_clone = Rc::clone(&app);
     add.connect_clicked(move |_| {

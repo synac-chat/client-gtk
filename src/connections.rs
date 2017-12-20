@@ -162,6 +162,16 @@ impl Connections {
             callback(inner.join());
         }
     }
+    pub fn foreach<F>(&self, mut callback: F)
+        where F: FnMut(&mut Synac)
+    {
+        let mut servers = self.servers.lock().unwrap();
+        for server in servers.values_mut() {
+            if let Ok(ref mut synac) = server.join() {
+                callback(synac);
+            }
+        }
+    }
     pub fn try_read<F>(&self, mut callback: F) -> Result<(), Error>
         where F: FnMut(&mut Synac, Packet)
     {
