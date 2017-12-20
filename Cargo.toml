@@ -1,13 +1,15 @@
 [package]
+authors = ["jD91mZM2 <me@krake.one>"]
 name = "client-gtk"
 version = "0.1.0"
-authors = ["jD91mZM2 <me@krake.one>"]
-
 [dependencies]
-chrono   = "0.4"
-failure  = "0.1.1"
-gdk      = "0.7"
-gtk = { version = "0.3", features = ["v3_22"] }
-rusqlite = "0.13"
-synac    = "0.2"
-xdg      = "2.1"
+chrono = "0.4.0"
+failure = "0.1.1"
+gdk = "0.7.0"
+rusqlite = "0.13.0"
+synac = "0.3.0"
+xdg = "2.1.0"
+
+[dependencies.gtk]
+features = ["v3_22"]
+version = "0.3.0"
