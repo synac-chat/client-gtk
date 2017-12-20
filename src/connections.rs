@@ -13,8 +13,8 @@ use typing::Typing;
 
 #[derive(Debug, Fail)]
 pub enum ConnectionError {
-    #[fail(display = "invalid packet")]
-    InvalidPacket,
+    #[fail(display = "invalid packet: {:?}", _0)]
+    InvalidPacket(Packet),
     #[fail(display = "invalid token: password authentication needed")]
     InvalidToken,
     #[fail(display = "invalid password")]
@@ -122,7 +122,7 @@ impl Connections {
                     return Ok(Synac::new(addr, session, login.id));
                 },
                 Packet::Err(common::ERR_LOGIN_INVALID) => {},
-                _ => return Err(ConnectionError::InvalidPacket.into())
+                packet => return Err(ConnectionError::InvalidPacket(packet).into())
             }
         }
         if let Some((password, db)) = password() {
@@ -135,7 +135,7 @@ impl Connections {
                 },
                 Packet::Err(common::ERR_LOGIN_INVALID) =>
                      return Err(ConnectionError::InvalidPassword.into()),
-                _ => return Err(ConnectionError::InvalidPacket.into())
+                packet => return Err(ConnectionError::InvalidPacket(packet).into())
             }
         }
 
