@@ -161,6 +161,9 @@ fn main() {
         window: window.clone()
     });
 
+    app.stack.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
+    app.user_stack.set_transition_type(gtk::StackTransitionType::Crossfade);
+
     app.stack.add(&app.stack_main);
     app.stack.add(&app.stack_add_server);
 
@@ -168,8 +171,10 @@ fn main() {
     app.user_stack.add(&app.user_stack_edit);
 
     let user_name = Label::new(&**app.connections.nick.read().unwrap());
+    add_class(&user_name, "bold");
 
-    app.user_stack_edit.set_placeholder_text("Nick");
+    app.user_stack_edit.set_alignment(0.5);
+
     let app_clone = Rc::clone(&app);
     let user_name_clone = user_name.clone();
     app.user_stack_edit.connect_activate(move |input| {
@@ -197,6 +202,11 @@ fn main() {
 
         *app_clone.connections.nick.write().unwrap() = text;
     });
+    let app_clone = Rc::clone(&app);
+    app.user_stack_edit.connect_focus_out_event(move |_, _| {
+        app_clone.user_stack.set_visible_child(&app_clone.user_stack_text);
+        Inhibit(false)
+    });
 
     let servers_wrapper = GtkBox::new(Orientation::Vertical, 0);
 
@@ -207,8 +217,9 @@ fn main() {
     let app_clone = Rc::clone(&app);
     app.user_stack_text.connect_button_press_event(move |_, event| {
         if event.get_button() == 1 {
-            app_clone.user_stack.set_visible_child(&app_clone.user_stack_edit);
+            app_clone.user_stack_edit.set_text(&app_clone.connections.nick.read().unwrap());
             app_clone.user_stack_edit.grab_focus();
+            app_clone.user_stack.set_visible_child(&app_clone.user_stack_edit);
         }
         Inhibit(false)
     });
@@ -231,6 +242,7 @@ fn main() {
 
     let channels_wrapper = GtkBox::new(Orientation::Vertical, 0);
 
+    add_class(&app.server_name, "bold");
     app.server_name.set_property_margin(10);
     channels_wrapper.add(&app.server_name);
 
@@ -244,6 +256,7 @@ fn main() {
 
     let content = GtkBox::new(Orientation::Vertical, 2);
 
+    add_class(&app.channel_name, "bold");
     app.channel_name.set_property_margin(10);
     content.add(&app.channel_name);
 
@@ -543,6 +556,12 @@ fn main() {
     });
     gtk::main();
 }
+fn add_class<T: WidgetExt>(widget: &T, class: &str) {
+    widget.get_style_context().and_then(|context| {
+        context.add_class(class);
+        Some(())
+    });
+}
 fn alert(window: &Window, kind: MessageType, message: &str) {
     let dialog = MessageDialog::new(
         Some(window),
@@ -772,6 +791,7 @@ fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                 let string = String::from_utf8_lossy(&msg.text).into_owned();
                 let text = Label::new(&*string);
+                text.set_selectable(true);
                 text.set_xalign(0.0);
 
                 let event = EventBox::new();
