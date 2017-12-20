@@ -536,15 +536,18 @@ fn connect(app: &Rc<App>, addr: SocketAddr, hash: String, token: Option<String>)
             render_channels(Some(addr), app);
             None
         },
-        Err(err)  => {
-            app.connections.set_current(None);
-            app.server_name.set_text("");
+        Err(err) => {
+            deselect_server(app);
             alert(&app.window, MessageType::Error, &format!("connection error: {}", err));
-            app.message_edit.set_reveal_child(false);
-            render_channels(None, app);
             Some(err)
         }
     }
+}
+fn deselect_server(app: &Rc<App>) {
+    app.connections.set_current(None);
+    app.server_name.set_text("");
+    app.message_edit.set_reveal_child(false);
+    render_channels(None, app);
 }
 fn render_servers(app: &Rc<App>) {
     for child in app.servers.get_children() {
@@ -555,7 +558,7 @@ fn render_servers(app: &Rc<App>) {
 
     while let Some(row) = rows.next() {
         let row = row.unwrap();
-        let addr:   String = row.get(0);
+        let addr: String = row.get(0);
         let name: String = row.get(1);
         let hash: String = row.get(2);
         let token: Option<String> = row.get(3);
@@ -598,6 +601,12 @@ fn render_servers(app: &Rc<App>) {
                 let addr_clone = addr.clone();
                 forget.connect_activate(move |_| {
                     app_clone.db.execute("DELETE FROM servers WHERE ip = ?", &[&addr_clone]).unwrap();
+                    if let Some(parsed) = ip_parsed {
+                        app_clone.connections.remove(parsed);
+                        if *app_clone.connections.current_server.lock().unwrap() == Some(parsed) {
+                            deselect_server(&app_clone);
+                        }
+                    }
                     render_servers(&app_clone);
                 });
                 menu.add(&forget);

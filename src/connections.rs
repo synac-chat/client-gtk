@@ -145,6 +145,10 @@ impl Connections {
         self.servers.lock().unwrap()
             .insert(addr, Connection::Connected(Ok(result)));
     }
+    pub fn remove(&self, addr: SocketAddr) {
+        self.servers.lock().unwrap()
+            .remove(&addr);
+    }
     pub fn set_current(&self, addr: Option<SocketAddr>) {
         *self.current_server.lock().unwrap() = addr;
     }
