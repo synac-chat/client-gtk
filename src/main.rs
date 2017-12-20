@@ -197,7 +197,6 @@ fn main() {
     content.add(&Separator::new(Orientation::Vertical));
 
     app.messages.set_vexpand(true);
-    app.messages.set_valign(Align::Center);
     app.messages_scroll.add(&app.messages);
 
     app.messages_scroll.get_vadjustment().unwrap().connect_changed(move |vadjustment| {
