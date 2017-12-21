@@ -51,6 +51,7 @@ use functions::*;
 use rusqlite::Connection as SqlConnection;
 use std::cell::RefCell;
 use std::env;
+use std::fmt::Write;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::SocketAddr;
 use std::rc::Rc;
@@ -63,6 +64,21 @@ use xdg::BaseDirectories;
 #[fail(display = "sadly GTK+ doesn't support unicode paths")]
 struct UnicodePathError;
 
+struct EditChannel {
+    container: GtkBox,
+    edit: RefCell<Option<usize>>,
+
+    name: Entry,
+    mode_bots: GtkBox,
+    mode_users: GtkBox
+}
+struct EditServer {
+    container: GtkBox,
+
+    name: Entry,
+    server: Entry,
+    hash: Entry
+}
 struct App {
     connections: Arc<Connections>,
     db: Rc<SqlConnection>,
@@ -77,24 +93,14 @@ struct App {
     server_name: Label,
     servers: GtkBox,
     stack: Stack,
-    stack_edit_channel: GtkBox,
-    stack_edit_server: GtkBox,
+    stack_edit_channel: EditChannel,
+    stack_edit_server: EditServer,
     stack_main: GtkBox,
     user_stack: Stack,
     user_stack_edit: Entry,
     user_stack_text: EventBox,
     typing: Label,
     window: Window
-}
-struct EditServer {
-    name: Entry,
-    server: Entry,
-    hash: Entry
-}
-struct EditChannel {
-    name: Entry,
-    mode_bots: GtkBox,
-    mode_users: GtkBox
 }
 
 fn main() {
@@ -123,7 +129,7 @@ fn main() {
                 )", &[])
         .expect("Couldn't create SQLite table");
     db.execute("CREATE TABLE IF NOT EXISTS servers (
-                    ip      TEXT NOT NULL PRIMARY KEY,
+                    ip      TEXT NOT NULL PRIMARY KEY UNIQUE,
                     name    TEXT NOT NULL,
                     hash    BLOB NOT NULL,
                     token   TEXT
@@ -168,8 +174,21 @@ fn main() {
         server_name: Label::new(""),
         servers: GtkBox::new(Orientation::Vertical, 2),
         stack: Stack::new(),
-        stack_edit_channel: GtkBox::new(Orientation::Vertical, 2),
-        stack_edit_server: GtkBox::new(Orientation::Vertical, 2),
+        stack_edit_channel: EditChannel {
+            container: GtkBox::new(Orientation::Vertical, 2),
+            edit: RefCell::new(None),
+
+            name: Entry::new(),
+            mode_bots: GtkBox::new(Orientation::Vertical, 2),
+            mode_users: GtkBox::new(Orientation::Vertical, 2)
+        },
+        stack_edit_server: EditServer {
+            container: GtkBox::new(Orientation::Vertical, 2),
+
+            name: Entry::new(),
+            server: Entry::new(),
+            hash: Entry::new()
+        },
         stack_main: GtkBox::new(Orientation::Horizontal, 10),
         user_stack: Stack::new(),
         user_stack_edit: Entry::new(),
@@ -177,23 +196,13 @@ fn main() {
         typing: Label::new(""),
         window: window
     });
-    let edit_server = Rc::new(EditServer {
-        name: Entry::new(),
-        server: Entry::new(),
-        hash: Entry::new()
-    });
-    let edit_channel = Rc::new(EditChannel {
-        name: Entry::new(),
-        mode_bots: GtkBox::new(Orientation::Vertical, 2),
-        mode_users: GtkBox::new(Orientation::Vertical, 2)
-    });
 
     app.stack.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
     app.user_stack.set_transition_type(gtk::StackTransitionType::Crossfade);
 
     app.stack.add(&app.stack_main);
-    app.stack.add(&app.stack_edit_server);
-    app.stack.add(&app.stack_edit_channel);
+    app.stack.add(&app.stack_edit_server.container);
+    app.stack.add(&app.stack_edit_channel.container);
 
     app.user_stack.add(&app.user_stack_text);
     app.user_stack.add(&app.user_stack_edit);
@@ -264,13 +273,13 @@ fn main() {
     add.set_vexpand(true);
 
     let app_clone = Rc::clone(&app);
-    let edit_server_clone = Rc::clone(&edit_server);
     add.connect_clicked(move |_| {
-        edit_server_clone.name.set_text("");
-        edit_server_clone.server.set_text("");
-        edit_server_clone.hash.set_text("");
+        app_clone.stack_edit_server.name.set_text("");
+        app_clone.stack_edit_server.server.set_text("");
+        app_clone.stack_edit_server.server.set_sensitive(true);
+        app_clone.stack_edit_server.hash.set_text("");
 
-        app_clone.stack.set_visible_child(&app_clone.stack_edit_server);
+        app_clone.stack.set_visible_child(&app_clone.stack_edit_server.container);
     });
 
     servers_wrapper.add(&add);
@@ -295,13 +304,13 @@ fn main() {
     add.set_vexpand(true);
 
     let app_clone = Rc::clone(&app);
-    let edit_server_clone = Rc::clone(&edit_server);
     add.connect_clicked(move |_| {
-        edit_server_clone.name.set_text("");
-        edit_server_clone.server.set_text("");
-        edit_server_clone.hash.set_text("");
+        *app_clone.stack_edit_channel.edit.borrow_mut() = None;
+        app_clone.stack_edit_channel.name.set_text("");
+        render_mode(&app_clone.stack_edit_channel.mode_bots, 0);
+        render_mode(&app_clone.stack_edit_channel.mode_users, common::PERM_READ | common::PERM_WRITE);
 
-        app_clone.stack.set_visible_child(&app_clone.stack_edit_channel);
+        app_clone.stack.set_visible_child(&app_clone.stack_edit_channel.container);
     });
 
     channels_wrapper.add(&add);
@@ -313,16 +322,6 @@ fn main() {
 
     add_class(&app.channel_name, "bold");
     app.channel_name.set_property_margin(10);
-
-    let app_clone = Rc::clone(&app);
-    let edit_channel_clone = Rc::clone(&edit_channel);
-    add.connect_clicked(move |_| {
-        edit_channel_clone.name.set_text("");
-        render_mode(&edit_channel_clone.mode_bots, 0);
-        render_mode(&edit_channel_clone.mode_users, common::PERM_READ | common::PERM_WRITE);
-
-        app_clone.stack.set_visible_child(&app_clone.stack_edit_channel);
-    });
 
     content.add(&app.channel_name);
     content.add(&Separator::new(Orientation::Vertical));
@@ -348,6 +347,8 @@ fn main() {
             app_clone.connections.execute(addr, |result| {
                 if let Ok(synac) = result {
                     if let Some(channel) = synac.current_channel {
+                        println!("requesting more messages");
+
                         if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
                             after: None,
                             before: synac.messages.get(channel).first().map(|msg| msg.id),
@@ -463,7 +464,7 @@ fn main() {
                         }
                     }
 
-                    let mut stmt = app_clone.db.prepare("SELECT hash, token FROM servers WHERE ip = ?").unwrap();
+                    let mut stmt = app_clone.db.prepare_cached("SELECT hash, token FROM servers WHERE ip = ?").unwrap();
                     let mut rows = stmt.query(&[&addr.to_string()]).unwrap();
 
                     if let Some(row) = rows.next() {
@@ -489,19 +490,23 @@ fn main() {
 
     app.stack_main.add(&content);
 
-    app.stack_edit_server.set_property_margin(10);
+    app.stack_edit_server.container.set_property_margin(10);
 
-    edit_server.name.set_placeholder_text("Server name...");
-    app.stack_edit_server.add(&edit_server.name);
-    app.stack_edit_server.add(&Label::new("The server name. This can be anything you want it to."));
+    app.stack_edit_server.name.set_placeholder_text("Server name...");
+    app.stack_edit_server.container.add(&app.stack_edit_server.name);
+    app.stack_edit_server.container.add(&Label::new("The server name. This can be anything you want it to."));
 
-    edit_server.server.set_placeholder_text("Server IP...");
-    app.stack_edit_server.add(&edit_server.server);
-    app.stack_edit_server.add(&Label::new(&*format!("The server IP address. The default port is {}.", common::DEFAULT_PORT)));
+    app.stack_edit_server.server.set_placeholder_text("Server IP...");
+    app.stack_edit_server.container.add(&app.stack_edit_server.server);
 
-    edit_server.hash.set_placeholder_text("Server's certificate hash...");
-    app.stack_edit_server.add(&edit_server.hash);
-    app.stack_edit_server.add(&Label::new("The server's certificate public key hash.\n\
+    let mut string = String::with_capacity(43 + 4 + 1);
+    write!(string, "The server IP address. The default port is {}.", common::DEFAULT_PORT).unwrap();
+
+    app.stack_edit_server.container.add(&Label::new(&*string));
+
+    app.stack_edit_server.hash.set_placeholder_text("Server's certificate hash...");
+    app.stack_edit_server.container.add(&app.stack_edit_server.hash);
+    app.stack_edit_server.container.add(&Label::new("The server's certificate public key hash.\n\
                                This is to verify nobody is snooping on your connection"));
 
     let edit_server_controls = GtkBox::new(Orientation::Horizontal, 2);
@@ -517,9 +522,9 @@ fn main() {
 
     let app_clone = Rc::clone(&app);
     edit_server_ok.connect_clicked(move |_| {
-        let name_text   = edit_server.name.get_text().unwrap_or_default();
-        let server_text = edit_server.server.get_text().unwrap_or_default();
-        let hash_text   = edit_server.hash.get_text().unwrap_or_default();
+        let name_text   = app_clone.stack_edit_server.name.get_text().unwrap_or_default();
+        let server_text = app_clone.stack_edit_server.server.get_text().unwrap_or_default();
+        let hash_text   = app_clone.stack_edit_server.hash.get_text().unwrap_or_default();
 
         let addr = match connections::parse_addr(&server_text) {
             Some(addr) => addr,
@@ -529,33 +534,33 @@ fn main() {
         app_clone.stack.set_visible_child(&app_clone.stack_main);
 
         app_clone.db.execute(
-            "INSERT INTO servers (name, ip, hash) VALUES (?, ?, ?)",
+            "REPLACE INTO servers (name, ip, hash) VALUES (?, ?, ?)",
             &[&name_text, &addr.to_string(), &hash_text]
         ).unwrap();
         render_servers(&app_clone);
     });
 
     edit_server_controls.add(&edit_server_ok);
-    app.stack_edit_server.add(&edit_server_controls);
+    app.stack_edit_server.container.add(&edit_server_controls);
 
-    app.stack_edit_channel.set_property_margin(10);
+    app.stack_edit_channel.container.set_property_margin(10);
 
-    edit_channel.name.set_placeholder_text("Channel name...");
-    app.stack_edit_channel.add(&edit_channel.name);
+    app.stack_edit_channel.name.set_placeholder_text("Channel name...");
+    app.stack_edit_channel.container.add(&app.stack_edit_channel.name);
 
-    app.stack_edit_channel.add(&Label::new("The channel name."));
+    app.stack_edit_channel.container.add(&Label::new("The channel name."));
 
     let label = Label::new("Default permissions for bots: ");
     label.set_xalign(0.0);
-    app.stack_edit_channel.add(&label);
+    app.stack_edit_channel.container.add(&label);
 
-    app.stack_edit_channel.add(&edit_channel.mode_bots);
+    app.stack_edit_channel.container.add(&app.stack_edit_channel.mode_bots);
 
     let label = Label::new("Default permissions for users: ");
     label.set_xalign(0.0);
-    app.stack_edit_channel.add(&label);
+    app.stack_edit_channel.container.add(&label);
 
-    app.stack_edit_channel.add(&edit_channel.mode_users);
+    app.stack_edit_channel.container.add(&app.stack_edit_channel.mode_users);
 
     let edit_channel_controls = GtkBox::new(Orientation::Horizontal, 2);
 
@@ -576,18 +581,30 @@ fn main() {
                 if result.is_err() { return; }
                 let synac = result.unwrap();
 
-                let name = edit_channel.name.get_text().unwrap_or_default();
+                let name = app_clone.stack_edit_channel.name.get_text().unwrap_or_default();
 
                 if name.is_empty() {
                     return;
                 }
 
-                let result = synac.session.send(&Packet::ChannelCreate(common::ChannelCreate {
-                    default_mode_bot: get_mode(&edit_channel.mode_bots).unwrap(),
-                    default_mode_user: get_mode(&edit_channel.mode_users).unwrap(),
-                    name: name
-                }));
-                if let Err(err) = result {
+                let packet = if let Some(channel) = *app_clone.stack_edit_channel.edit.borrow() {
+                    Packet::ChannelUpdate(common::ChannelUpdate {
+                        inner: common::Channel {
+                            default_mode_bot: get_mode(&app_clone.stack_edit_channel.mode_bots).unwrap(),
+                            default_mode_user: get_mode(&app_clone.stack_edit_channel.mode_users).unwrap(),
+                            id: channel,
+                            name: name
+                        }
+                    })
+                } else {
+                    Packet::ChannelCreate(common::ChannelCreate {
+                        default_mode_bot: get_mode(&app_clone.stack_edit_channel.mode_bots).unwrap(),
+                        default_mode_user: get_mode(&app_clone.stack_edit_channel.mode_users).unwrap(),
+                        name: name
+                    })
+                };
+
+                if let Err(err) = synac.session.send(&packet) {
                     alert(&app_clone.window, MessageType::Error, &err.to_string());
                 }
             });
@@ -595,7 +612,7 @@ fn main() {
     });
 
     edit_channel_controls.add(&edit_channel_ok);
-    app.stack_edit_channel.add(&edit_channel_controls);
+    app.stack_edit_channel.container.add(&edit_channel_controls);
 
     app.window.add(&app.stack);
 

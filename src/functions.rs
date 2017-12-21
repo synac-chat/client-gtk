@@ -125,12 +125,16 @@ pub(crate) fn render_servers(app: &Rc<App>) {
 
     while let Some(row) = rows.next() {
         let row = row.unwrap();
-        let addr: String = row.get(0);
-        let name: String = row.get(1);
-        let hash: String = row.get(2);
-        let token: Option<String> = row.get(3);
+        let addr: Rc<String> = Rc::new(row.get(0));
+        let name: Rc<String> = Rc::new(row.get(1));
+        let hash: Rc<String> = Rc::new(row.get(2));
+        let token: Rc<Option<String>> = Rc::new(row.get(3));
 
         let ip_parsed = connections::parse_addr(&addr);
+
+        let name_clone: Rc<String> = Rc::clone(&name);
+        let hash_clone: Rc<String> = Rc::clone(&hash);
+        let token_clone: Rc<Option<String>> = Rc::clone(&token);
 
         let button = Button::new_with_label(&name);
         let app_clone = Rc::clone(&app);
@@ -142,8 +146,8 @@ pub(crate) fn render_servers(app: &Rc<App>) {
                     return;
                 }
             };
-            println!("Server with IP {} was clicked", addr);
-            app_clone.server_name.set_text(&name);
+            println!("server with ip {} was clicked", addr);
+            app_clone.server_name.set_text(&name_clone);
             let mut ok = false;
             app_clone.connections.execute(addr, |result| {
                 ok = result.is_ok();
@@ -153,7 +157,7 @@ pub(crate) fn render_servers(app: &Rc<App>) {
                 app_clone.message_edit.set_reveal_child(false);
                 render_channels(Some(addr), &app_clone);
             } else {
-                connect(&app_clone, addr, hash.clone(), token.clone());
+                connect(&app_clone, addr, (*hash_clone).clone(), (*token_clone).clone());
             }
         });
 
@@ -162,16 +166,32 @@ pub(crate) fn render_servers(app: &Rc<App>) {
             if event.get_button() == 3 {
                 let menu = Menu::new();
 
+                let addr_clone: Rc<String> = Rc::clone(&addr);
+                let name: Rc<String> = Rc::clone(&name);
+                let hash: Rc<String> = Rc::clone(&hash);
+
+                let edit = MenuItem::new_with_label("Edit server");
+                let app_clone2 = Rc::clone(&app_clone);
+                edit.connect_activate(move |_| {
+                    app_clone2.stack_edit_server.name.set_text(&name);
+                    app_clone2.stack_edit_server.server.set_text(&addr_clone);
+                    app_clone2.stack_edit_server.server.set_sensitive(false);
+                    app_clone2.stack_edit_server.hash.set_text(&hash);
+
+                    app_clone2.stack.set_visible_child(&app_clone2.stack_edit_server.container);
+                });
+                menu.add(&edit);
+
                 let disconnect = MenuItem::new_with_label("Disconnect server");
 
-                let app_clone1 = Rc::clone(&app_clone);
+                let app_clone2 = Rc::clone(&app_clone);
                 disconnect.connect_activate(move |_| {
                     if let Some(parsed) = ip_parsed {
-                        app_clone1.connections.remove(parsed);
-                        if *app_clone1.connections.current_server.lock().unwrap() == Some(parsed) {
-                            deselect_server(&app_clone1);
+                        app_clone2.connections.remove(parsed);
+                        if *app_clone2.connections.current_server.lock().unwrap() == Some(parsed) {
+                            deselect_server(&app_clone2);
                         }
-                        render_servers(&app_clone1);
+                        render_servers(&app_clone2);
                     }
                 });
                 menu.add(&disconnect);
@@ -179,9 +199,9 @@ pub(crate) fn render_servers(app: &Rc<App>) {
                 let forget = MenuItem::new_with_label("Forget server");
 
                 let app_clone2 = Rc::clone(&app_clone);
-                let addr_clone = addr.clone();
+                let addr = Rc::clone(&addr);
                 forget.connect_activate(move |_| {
-                    app_clone2.db.execute("DELETE FROM servers WHERE ip = ?", &[&addr_clone]).unwrap();
+                    app_clone2.db.execute("DELETE FROM servers WHERE ip = ?", &[&*addr]).unwrap();
                     if let Some(parsed) = ip_parsed {
                         app_clone2.connections.remove(parsed);
                         if *app_clone2.connections.current_server.lock().unwrap() == Some(parsed) {
@@ -208,40 +228,92 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
     }
     if let Some(addr) = addr {
         app.connections.execute(addr, |result| {
-            if let Ok(server) = result {
-                let mut channel_list: Vec<_> = server.state.channels.values().collect();
-                channel_list.sort_by_key(|channel| &channel.name);
-                for channel in channel_list {
-                    let mut name = String::with_capacity(channel.name.len() + 1);
-                    name.push('#');
-                    name.push_str(&channel.name);
+            if result.is_err() { return; }
+            let synac = result.unwrap();
 
-                    let button = Button::new_with_label(&name);
+            let mut channel_list: Vec<_> = synac.state.channels.values().collect();
+            channel_list.sort_by_key(|channel| &channel.name);
 
-                    let channel_id = channel.id;
+            for channel in channel_list {
+                let mut name = String::with_capacity(channel.name.len() + 1);
+                name.push('#');
+                name.push_str(&channel.name);
 
-                    let app_clone = Rc::clone(&app);
-                    button.connect_clicked(move |_| {
+                let button = Button::new_with_label(&name);
+
+                let channel_id = channel.id;
+
+                let app_clone = Rc::clone(&app);
+                button.connect_clicked(move |_| {
+                    app_clone.connections.execute(addr, |result| {
+                        if let Ok(synac) = result {
+                            synac.current_channel = Some(channel_id);
+                            app_clone.channel_name.set_text(&name);
+                            if !synac.messages.has(channel_id) {
+                                if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
+                                    after: None,
+                                    before: None,
+                                    channel: channel_id,
+                                    limit: common::LIMIT_BULK
+                                })) {
+                                    eprintln!("error sending packet: {}", err);
+                                }
+                            }
+                        }
+                    });
+                    render_messages(Some(addr), &app_clone);
+                });
+                app.channels.add(&button);
+
+                let app_clone = Rc::clone(&app);
+                button.connect_button_press_event(move |_, event| {
+                    if event.get_button() == 3 {
+                        let menu = Menu::new();
+
+                        let mut has_perms = false;
+
                         app_clone.connections.execute(addr, |result| {
-                            if let Ok(synac) = result {
-                                synac.current_channel = Some(channel_id);
-                                app_clone.channel_name.set_text(&name);
-                                if !synac.messages.has(channel_id) {
-                                    if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
-                                        after: None,
-                                        before: None,
-                                        channel: channel_id,
-                                        limit: common::LIMIT_BULK
-                                    })) {
-                                        eprintln!("error sending packet: {}", err);
-                                    }
+                            if result.is_err() { return; }
+                            let synac = result.unwrap();
+
+                            if let Some(channel) = synac.state.channels.get(&channel_id) {
+                                if let Some(user) = synac.state.users.get(&synac.user) {
+                                    has_perms = synac::get_perm(&channel, &user) & common::PERM_MANAGE_CHANNELS
+                                                    == common::PERM_MANAGE_CHANNELS;
                                 }
                             }
                         });
-                        render_messages(Some(addr), &app_clone);
-                    });
-                    app.channels.add(&button);
-                }
+
+                        if has_perms {
+                            let edit = MenuItem::new_with_label("Edit channel");
+
+                            let app_clone = Rc::clone(&app_clone);
+                            edit.connect_activate(move |_| {
+                                let mut channel = None;
+                                app_clone.connections.execute(addr, |result| {
+                                    if result.is_err() { return; }
+                                    let synac = result.unwrap();
+
+                                    channel = synac.state.channels.get(&channel_id).cloned();
+                                });
+                                if let Some(channel) = channel {
+                                    *app_clone.stack_edit_channel.edit.borrow_mut() = Some(channel.id);
+                                    app_clone.stack_edit_channel.name.set_text(&channel.name);
+                                    render_mode(&app_clone.stack_edit_channel.mode_bots, channel.default_mode_bot);
+                                    render_mode(&app_clone.stack_edit_channel.mode_users, channel.default_mode_user);
+                                }
+
+                                app_clone.stack.set_visible_child(&app_clone.stack_edit_channel.container);
+                            });
+
+                            menu.add(&edit);
+                        }
+
+                        menu.show_all();
+                        menu.popup_at_pointer(&**event);
+                    }
+                    Inhibit(false)
+                });
             }
         });
     } else {
@@ -339,8 +411,8 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                             if let Some(channel) = synac.state.channels.get(&channel_id) {
                                 if let Some(user) = synac.state.users.get(&synac.user) {
-                                    has_perms = synac::get_perm(&channel, &user) & common::PERM_MANAGE_MODES
-                                                    == common::PERM_MANAGE_MODES;
+                                    has_perms = synac::get_perm(&channel, &user) & common::PERM_MANAGE_MESSAGES
+                                                    == common::PERM_MANAGE_MESSAGES;
                                 }
                             }
                         });
