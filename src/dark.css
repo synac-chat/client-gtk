@@ -1,0 +1,20 @@
+window {
+    background: #161616;
+    color: #CFD8DC;
+}
+entry {
+    color: #D0D9DD;
+}
+.bold, .author {
+    font-weight: bold;
+}
+label.time {
+    color: #828282;
+}
+button.add {
+    background: #56486d;
+}
+button:not(.add) {
+    background: #a8a8a8;
+    color: #161616;
+}

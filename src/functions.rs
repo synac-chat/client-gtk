@@ -1,5 +1,9 @@
 use ::*;
 
+// BTW, only reason for pub(crate) is because it
+// otherwise complains about publishing a private type.
+// It's not like you can `extern crate` a program, can you?
+
 pub(crate) fn add_class<T: WidgetExt>(widget: &T, class: &str) {
     widget.get_style_context().and_then(|context| {
         context.add_class(class);
@@ -61,6 +65,56 @@ pub(crate) fn deselect_server(app: &Rc<App>) {
     app.server_name.set_text("");
     app.message_edit.set_reveal_child(false);
     render_channels(None, app);
+}
+pub(crate) fn render_mode(container: &GtkBox, bitmask: u8) {
+    for child in container.get_children() {
+        container.remove(&child);
+    }
+
+    let mut check = CheckButton::new_with_label("Read messages");
+    check.set_active(bitmask & common::PERM_READ == common::PERM_READ);
+    container.add(&check);
+
+    check = CheckButton::new_with_label("Write messages");
+    check.set_active(bitmask & common::PERM_WRITE == common::PERM_WRITE);
+    container.add(&check);
+
+    check = CheckButton::new_with_label("Manage channel");
+    check.set_active(bitmask & common::PERM_MANAGE_CHANNELS == common::PERM_MANAGE_CHANNELS);
+    container.add(&check);
+
+    check = CheckButton::new_with_label("Manage messages");
+    check.set_active(bitmask & common::PERM_MANAGE_MESSAGES == common::PERM_MANAGE_MESSAGES);
+    container.add(&check);
+
+    check = CheckButton::new_with_label("Manage user modes");
+    check.set_active(bitmask & common::PERM_MANAGE_MODES == common::PERM_MANAGE_MODES);
+    container.add(&check);
+
+    container.show_all();
+    container.queue_draw();
+}
+pub(crate) fn get_mode(container: &GtkBox) -> Option<u8> {
+    let mut children = container.get_children().into_iter();
+    let mut bitmask = 0;
+
+    if children.next()?.downcast::<CheckButton>().ok()?.get_active() {
+        bitmask |= common::PERM_READ;
+    }
+    if children.next()?.downcast::<CheckButton>().ok()?.get_active() {
+        bitmask |= common::PERM_WRITE;
+    }
+    if children.next()?.downcast::<CheckButton>().ok()?.get_active() {
+        bitmask |= common::PERM_MANAGE_CHANNELS;
+    }
+    if children.next()?.downcast::<CheckButton>().ok()?.get_active() {
+        bitmask |= common::PERM_MANAGE_MESSAGES;
+    }
+    if children.next()?.downcast::<CheckButton>().ok()?.get_active() {
+        bitmask |= common::PERM_MANAGE_MODES;
+    }
+
+    Some(bitmask)
 }
 pub(crate) fn render_servers(app: &Rc<App>) {
     for child in app.servers.get_children() {
@@ -218,8 +272,13 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                 if last.map(|msg| msg.author) != Some(msg.author)
                     || last.map(|msg| msg.timestamp + 60*5) < Some(msg.timestamp) {
+                    if last.is_some() {
+                        app.messages.add(&Separator::new(Orientation::Vertical));
+                    }
+
                     let author = Label::new(&*synac.state.users[&msg.author].name);
                     author.set_xalign(0.0);
+                    add_class(&author, "author");
                     authorbox.add(&author);
 
                     authorbox.add(&Separator::new(Orientation::Horizontal));
@@ -232,7 +291,10 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
                         time.push(')');
                     }
                     let time = Label::new(&*time);
-                    time.set_xalign(0.0);
+                    time.set_margin_right(10);
+                    time.set_hexpand(true);
+                    time.set_xalign(1.0);
+                    add_class(&time, "time");
                     authorbox.add(&time);
 
                     msgbox.add(&authorbox);
@@ -308,9 +370,7 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
                 });
 
                 msgbox.add(&text);
-
                 app.messages.add(&msgbox);
-                app.messages.add(&Separator::new(Orientation::Vertical));
 
                 last = Some(msg);
             }

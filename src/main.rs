@@ -19,6 +19,7 @@ use gtk::{
     Box as GtkBox,
     Button,
     ButtonsType,
+    CheckButton,
     CssProvider,
     Dialog,
     DialogFlags,
@@ -76,13 +77,24 @@ struct App {
     server_name: Label,
     servers: GtkBox,
     stack: Stack,
-    stack_add_server: GtkBox,
+    stack_edit_channel: GtkBox,
+    stack_edit_server: GtkBox,
     stack_main: GtkBox,
     user_stack: Stack,
     user_stack_edit: Entry,
     user_stack_text: EventBox,
     typing: Label,
     window: Window
+}
+struct EditServer {
+    name: Entry,
+    server: Entry,
+    hash: Entry
+}
+struct EditChannel {
+    name: Entry,
+    mode_bots: GtkBox,
+    mode_users: GtkBox
 }
 
 fn main() {
@@ -151,25 +163,37 @@ fn main() {
         message_edit: Revealer::new(),
         message_edit_id: RefCell::new(None),
         message_edit_input: Entry::new(),
-        messages: GtkBox::new(Orientation::Vertical, 2),
+        messages: GtkBox::new(Orientation::Vertical, 10),
         messages_scroll: ScrolledWindow::new(None, None),
         server_name: Label::new(""),
         servers: GtkBox::new(Orientation::Vertical, 2),
         stack: Stack::new(),
-        stack_add_server: GtkBox::new(Orientation::Vertical, 2),
+        stack_edit_channel: GtkBox::new(Orientation::Vertical, 2),
+        stack_edit_server: GtkBox::new(Orientation::Vertical, 2),
         stack_main: GtkBox::new(Orientation::Horizontal, 10),
         user_stack: Stack::new(),
         user_stack_edit: Entry::new(),
         user_stack_text: EventBox::new(),
         typing: Label::new(""),
-        window: window.clone()
+        window: window
+    });
+    let edit_server = Rc::new(EditServer {
+        name: Entry::new(),
+        server: Entry::new(),
+        hash: Entry::new()
+    });
+    let edit_channel = Rc::new(EditChannel {
+        name: Entry::new(),
+        mode_bots: GtkBox::new(Orientation::Vertical, 2),
+        mode_users: GtkBox::new(Orientation::Vertical, 2)
     });
 
     app.stack.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
     app.user_stack.set_transition_type(gtk::StackTransitionType::Crossfade);
 
     app.stack.add(&app.stack_main);
-    app.stack.add(&app.stack_add_server);
+    app.stack.add(&app.stack_edit_server);
+    app.stack.add(&app.stack_edit_channel);
 
     app.user_stack.add(&app.user_stack_text);
     app.user_stack.add(&app.user_stack_edit);
@@ -235,8 +259,19 @@ fn main() {
     servers_wrapper.add(&app.servers);
 
     let add = Button::new_with_label("Add...");
+    add_class(&add, "add");
     add.set_valign(Align::End);
     add.set_vexpand(true);
+
+    let app_clone = Rc::clone(&app);
+    let edit_server_clone = Rc::clone(&edit_server);
+    add.connect_clicked(move |_| {
+        edit_server_clone.name.set_text("");
+        edit_server_clone.server.set_text("");
+        edit_server_clone.hash.set_text("");
+
+        app_clone.stack.set_visible_child(&app_clone.stack_edit_server);
+    });
 
     servers_wrapper.add(&add);
 
@@ -254,6 +289,22 @@ fn main() {
 
     channels_wrapper.add(&app.channels);
 
+    let add = Button::new_with_label("Add...");
+    add_class(&add, "add");
+    add.set_valign(Align::End);
+    add.set_vexpand(true);
+
+    let app_clone = Rc::clone(&app);
+    let edit_server_clone = Rc::clone(&edit_server);
+    add.connect_clicked(move |_| {
+        edit_server_clone.name.set_text("");
+        edit_server_clone.server.set_text("");
+        edit_server_clone.hash.set_text("");
+
+        app_clone.stack.set_visible_child(&app_clone.stack_edit_channel);
+    });
+
+    channels_wrapper.add(&add);
     app.stack_main.add(&channels_wrapper);
 
     app.stack_main.add(&Separator::new(Orientation::Horizontal));
@@ -262,10 +313,21 @@ fn main() {
 
     add_class(&app.channel_name, "bold");
     app.channel_name.set_property_margin(10);
-    content.add(&app.channel_name);
 
+    let app_clone = Rc::clone(&app);
+    let edit_channel_clone = Rc::clone(&edit_channel);
+    add.connect_clicked(move |_| {
+        edit_channel_clone.name.set_text("");
+        render_mode(&edit_channel_clone.mode_bots, 0);
+        render_mode(&edit_channel_clone.mode_users, common::PERM_READ | common::PERM_WRITE);
+
+        app_clone.stack.set_visible_child(&app_clone.stack_edit_channel);
+    });
+
+    content.add(&app.channel_name);
     content.add(&Separator::new(Orientation::Vertical));
 
+    app.messages.set_valign(Align::End);
     app.messages.set_vexpand(true);
     app.messages_scroll.add(&app.messages);
 
@@ -347,7 +409,7 @@ fn main() {
 
     let input = Entry::new();
     input.set_hexpand(true);
-    input.set_placeholder_text("Send a message");
+    input.set_placeholder_text("Send a message...");
 
     let typing_duration = Duration::from_secs(common::TYPING_TIMEOUT as u64 / 2); // TODO: const fn
     let typing_last = RefCell::new(Instant::now());
@@ -427,47 +489,42 @@ fn main() {
 
     app.stack_main.add(&content);
 
-    let name = Entry::new();
-    name.set_placeholder_text("Name");
-    app.stack_add_server.add(&name);
-    app.stack_add_server.add(&Label::new("The server name. This can be anything you want it to."));
+    app.stack_edit_server.set_property_margin(10);
 
-    let server = Entry::new();
-    server.set_placeholder_text("Server IP");
-    app.stack_add_server.add(&server);
-    app.stack_add_server.add(&Label::new(&*format!("The server IP address. The default port is {}.", common::DEFAULT_PORT)));
+    edit_server.name.set_placeholder_text("Server name...");
+    app.stack_edit_server.add(&edit_server.name);
+    app.stack_edit_server.add(&Label::new("The server name. This can be anything you want it to."));
 
-    let hash = Entry::new();
-    hash.set_placeholder_text("Server's certificate hash");
-    app.stack_add_server.add(&hash);
-    app.stack_add_server.add(&Label::new("The server's certificate public key hash.\n\
+    edit_server.server.set_placeholder_text("Server IP...");
+    app.stack_edit_server.add(&edit_server.server);
+    app.stack_edit_server.add(&Label::new(&*format!("The server IP address. The default port is {}.", common::DEFAULT_PORT)));
+
+    edit_server.hash.set_placeholder_text("Server's certificate hash...");
+    app.stack_edit_server.add(&edit_server.hash);
+    app.stack_edit_server.add(&Label::new("The server's certificate public key hash.\n\
                                This is to verify nobody is snooping on your connection"));
 
-    let add_server_controls = GtkBox::new(Orientation::Horizontal, 2);
+    let edit_server_controls = GtkBox::new(Orientation::Horizontal, 2);
 
-    let add_server_cancel = Button::new_with_label("Cancel");
+    let edit_server_cancel = Button::new_with_label("Cancel");
     let app_clone = Rc::clone(&app);
-    add_server_cancel.connect_clicked(move |_| {
+    edit_server_cancel.connect_clicked(move |_| {
         app_clone.stack.set_visible_child(&app_clone.stack_main);
     });
-    add_server_controls.add(&add_server_cancel);
+    edit_server_controls.add(&edit_server_cancel);
 
-    let add_server_ok = Button::new_with_label("Ok");
+    let edit_server_ok = Button::new_with_label("Ok");
 
     let app_clone = Rc::clone(&app);
-    add_server_ok.connect_clicked(move |_| {
-        let name_text   = name.get_text().unwrap_or_default();
-        let server_text = server.get_text().unwrap_or_default();
-        let hash_text   = hash.get_text().unwrap_or_default();
+    edit_server_ok.connect_clicked(move |_| {
+        let name_text   = edit_server.name.get_text().unwrap_or_default();
+        let server_text = edit_server.server.get_text().unwrap_or_default();
+        let hash_text   = edit_server.hash.get_text().unwrap_or_default();
 
         let addr = match connections::parse_addr(&server_text) {
             Some(addr) => addr,
             None => return
         };
-
-        name.set_text("");
-        server.set_text("");
-        hash.set_text("");
 
         app_clone.stack.set_visible_child(&app_clone.stack_main);
 
@@ -477,16 +534,70 @@ fn main() {
         ).unwrap();
         render_servers(&app_clone);
     });
-    add_server_controls.add(&add_server_ok);
 
-    app.stack_add_server.add(&add_server_controls);
+    edit_server_controls.add(&edit_server_ok);
+    app.stack_edit_server.add(&edit_server_controls);
+
+    app.stack_edit_channel.set_property_margin(10);
+
+    edit_channel.name.set_placeholder_text("Channel name...");
+    app.stack_edit_channel.add(&edit_channel.name);
+
+    app.stack_edit_channel.add(&Label::new("The channel name."));
+
+    let label = Label::new("Default permissions for bots: ");
+    label.set_xalign(0.0);
+    app.stack_edit_channel.add(&label);
+
+    app.stack_edit_channel.add(&edit_channel.mode_bots);
+
+    let label = Label::new("Default permissions for users: ");
+    label.set_xalign(0.0);
+    app.stack_edit_channel.add(&label);
+
+    app.stack_edit_channel.add(&edit_channel.mode_users);
+
+    let edit_channel_controls = GtkBox::new(Orientation::Horizontal, 2);
+
+    let edit_channel_cancel = Button::new_with_label("Cancel");
+    let app_clone = Rc::clone(&app);
+    edit_channel_cancel.connect_clicked(move |_| {
+        app_clone.stack.set_visible_child(&app_clone.stack_main);
+    });
+    edit_channel_controls.add(&edit_channel_cancel);
+
+    let edit_channel_ok = Button::new_with_label("Ok");
 
     let app_clone = Rc::clone(&app);
-    add.connect_clicked(move |_| {
-        app_clone.stack.set_visible_child(&app_clone.stack_add_server);
+    edit_channel_ok.connect_clicked(move |_| {
+        app_clone.stack.set_visible_child(&app_clone.stack_main);
+        if let Some(addr) = *app_clone.connections.current_server.lock().unwrap() {
+            app_clone.connections.execute(addr, |result| {
+                if result.is_err() { return; }
+                let synac = result.unwrap();
+
+                let name = edit_channel.name.get_text().unwrap_or_default();
+
+                if name.is_empty() {
+                    return;
+                }
+
+                let result = synac.session.send(&Packet::ChannelCreate(common::ChannelCreate {
+                    default_mode_bot: get_mode(&edit_channel.mode_bots).unwrap(),
+                    default_mode_user: get_mode(&edit_channel.mode_users).unwrap(),
+                    name: name
+                }));
+                if let Err(err) = result {
+                    alert(&app_clone.window, MessageType::Error, &err.to_string());
+                }
+            });
+        }
     });
 
-    window.add(&app.stack);
+    edit_channel_controls.add(&edit_channel_ok);
+    app.stack_edit_channel.add(&edit_channel_controls);
+
+    app.window.add(&app.stack);
 
     // Load CSS
     let screen = Screen::get_default();
@@ -501,17 +612,25 @@ fn main() {
                     Err(UnicodePathError.into())
                 }
             } else {
-                css.load_from_data(include_bytes!("style.css")).map_err(Error::from)
+                let dark = if let Some(settings) = app.window.get_settings() {
+                    settings.get_property_gtk_application_prefer_dark_theme()
+                } else { false };
+
+                css.load_from_data(if dark {
+                    include_bytes!("dark.css")
+                } else {
+                    include_bytes!("light.css")
+                }).map_err(Error::from)
             };
             if let Err(err) = result {
-                alert(&window, MessageType::Error, &err.to_string());
+                alert(&app.window, MessageType::Error, &err.to_string());
             }
             StyleContext::add_provider_for_screen(&screen, &css, STYLE_PROVIDER_PRIORITY_APPLICATION);
         }
     }
 
-    window.show_all();
-    window.connect_delete_event(|_, _| {
+    app.window.show_all();
+    app.window.connect_delete_event(|_, _| {
         gtk::main_quit();
         Inhibit(false)
     });
