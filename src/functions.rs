@@ -210,110 +210,109 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
             if synac.current_channel.is_none() { return };
             let channel = synac.current_channel.unwrap();
 
+            let mut last: Option<&common::Message> = None;
+
             for msg in synac.messages.get(channel) {
                 let msgbox = GtkBox::new(Orientation::Vertical, 2);
                 let authorbox = GtkBox::new(Orientation::Horizontal, 4);
 
-                let author = Label::new(&*synac.state.users[&msg.author].name);
-                author.set_xalign(0.0);
-                authorbox.add(&author);
+                if last.map(|msg| msg.author) != Some(msg.author)
+                    || last.map(|msg| msg.timestamp + 60*5) < Some(msg.timestamp) {
+                    let author = Label::new(&*synac.state.users[&msg.author].name);
+                    author.set_xalign(0.0);
+                    authorbox.add(&author);
 
-                authorbox.add(&Separator::new(Orientation::Horizontal));
+                    authorbox.add(&Separator::new(Orientation::Horizontal));
 
-                let mut time = String::with_capacity(32); // just a guess
-                messages::format(&mut time, msg.timestamp);
-                if let Some(edit) = msg.timestamp_edit {
-                    time.push_str(" (edited ");
-                    messages::format(&mut time, edit);
-                    time.push(')');
+                    let mut time = String::with_capacity(32); // just a guess
+                    messages::format(&mut time, msg.timestamp);
+                    if let Some(edit) = msg.timestamp_edit {
+                        time.push_str(" (edited ");
+                        messages::format(&mut time, edit);
+                        time.push(')');
+                    }
+                    let time = Label::new(&*time);
+                    time.set_xalign(0.0);
+                    authorbox.add(&time);
+
+                    msgbox.add(&authorbox);
                 }
-                let time = Label::new(&*time);
-                time.set_xalign(0.0);
-                authorbox.add(&time);
-
-                msgbox.add(&authorbox);
 
                 let string = String::from_utf8_lossy(&msg.text).into_owned();
                 let text = Label::new(&*string);
+                text.set_line_wrap(true);
                 text.set_selectable(true);
                 text.set_xalign(0.0);
-
-                let event = EventBox::new();
-                event.add(&text);
 
                 let app_clone = Rc::clone(&app);
                 let msg_id = msg.id;
                 let msg_mine = msg.author == synac.user;
 
-                event.connect_button_press_event(move |_, event| {
-                    if event.get_button() == 3 {
-                        let menu = Menu::new();
+                text.connect_populate_popup(move |_, menu| {
+                    menu.add(&SeparatorMenuItem::new());
 
-                        let mut has_perms = false;
+                    let mut has_perms = false;
 
-                        if msg_mine {
-                            has_perms = true;
+                    if msg_mine {
+                        has_perms = true;
 
-                            let edit = MenuItem::new_with_label("Edit message");
+                        let edit = MenuItem::new_with_label("Edit message");
 
-                            let app_clone = Rc::clone(&app_clone);
-                            let string = string.clone();
-                            edit.connect_activate(move |_| {
-                                *app_clone.message_edit_id.borrow_mut() = Some(msg_id);
-                                app_clone.message_edit_input.set_text(&string);
-                                app_clone.message_edit.set_reveal_child(true);
-                            });
+                        let app_clone = Rc::clone(&app_clone);
+                        let string = string.clone();
+                        edit.connect_activate(move |_| {
+                            *app_clone.message_edit_id.borrow_mut() = Some(msg_id);
+                            app_clone.message_edit_input.set_text(&string);
+                            app_clone.message_edit.set_reveal_child(true);
+                        });
 
-                            menu.add(&edit);
-                        } else {
+                        menu.add(&edit);
+                    } else {
+                        app_clone.connections.execute(addr, |result| {
+                            if result.is_err() { return; }
+                            let synac = result.unwrap();
+
+                            if synac.current_channel.is_none() { return };
+                            let channel_id = synac.current_channel.unwrap();
+
+                            if let Some(channel) = synac.state.channels.get(&channel_id) {
+                                if let Some(user) = synac.state.users.get(&synac.user) {
+                                    has_perms = synac::get_perm(&channel, &user) & common::PERM_MANAGE_MODES
+                                                    == common::PERM_MANAGE_MODES;
+                                }
+                            }
+                        });
+                    }
+
+                    if has_perms {
+                        let delete = MenuItem::new_with_label("Delete message");
+
+                        let app_clone = Rc::clone(&app_clone);
+                        delete.connect_activate(move |_| {
                             app_clone.connections.execute(addr, |result| {
                                 if result.is_err() { return; }
                                 let synac = result.unwrap();
 
-                                if synac.current_channel.is_none() { return };
-                                let channel_id = synac.current_channel.unwrap();
-
-                                if let Some(channel) = synac.state.channels.get(&channel_id) {
-                                    if let Some(user) = synac.state.users.get(&synac.user) {
-                                        has_perms = synac::get_perm(&channel, &user) & common::PERM_MANAGE_MODES
-                                                        == common::PERM_MANAGE_MODES;
-                                    }
+                                let result = synac.session.send(&Packet::MessageDelete(common::MessageDelete {
+                                    id: msg_id
+                                }));
+                                if let Err(err) = result {
+                                    eprintln!("error sending packet: {}", err);
                                 }
                             });
-                        }
+                        });
 
-                        if has_perms {
-                            let delete = MenuItem::new_with_label("Delete message");
-
-                            let app_clone = Rc::clone(&app_clone);
-                            delete.connect_activate(move |_| {
-                                app_clone.connections.execute(addr, |result| {
-                                    if result.is_err() { return; }
-                                    let synac = result.unwrap();
-
-                                    let result = synac.session.send(&Packet::MessageDelete(common::MessageDelete {
-                                        id: msg_id
-                                    }));
-                                    if let Err(err) = result {
-                                        eprintln!("error sending packet: {}", err);
-                                    }
-                                });
-                            });
-
-                            menu.add(&delete);
-                        }
-
-                        menu.show_all();
-                        menu.popup_at_pointer(Some(&**event));
+                        menu.add(&delete);
                     }
-                    Inhibit(false)
+                    menu.show_all();
                 });
 
-                msgbox.add(&event);
+                msgbox.add(&text);
 
                 app.messages.add(&msgbox);
-
                 app.messages.add(&Separator::new(Orientation::Vertical));
+
+                last = Some(msg);
             }
         });
     }

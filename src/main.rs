@@ -31,12 +31,14 @@ use gtk::{
     MessageDialog,
     MessageType,
     Orientation,
+    PolicyType,
     PositionType,
     ResponseType,
     Revealer,
     RevealerTransitionType,
     ScrolledWindow,
     Separator,
+    SeparatorMenuItem,
     Stack,
     StyleContext,
     STYLE_PROVIDER_PRIORITY_APPLICATION,
@@ -267,6 +269,8 @@ fn main() {
     app.messages.set_vexpand(true);
     app.messages_scroll.add(&app.messages);
 
+    app.messages_scroll.set_policy(PolicyType::Never, PolicyType::Always);
+
     app.messages_scroll.get_vadjustment().unwrap().connect_changed(move |vadjustment| {
         let upper = vadjustment.get_upper() - vadjustment.get_page_size();
         if vadjustment.get_value() + 100.0 >= upper {
@@ -413,6 +417,7 @@ fn main() {
         }
         input.set_text("");
         input.set_sensitive(true);
+        input.grab_focus();
     });
 
     content.add(&input);
