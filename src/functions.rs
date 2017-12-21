@@ -287,26 +287,43 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                         if has_perms {
                             let edit = MenuItem::new_with_label("Edit channel");
 
-                            let app_clone = Rc::clone(&app_clone);
+                            let app_clone1 = Rc::clone(&app_clone);
                             edit.connect_activate(move |_| {
-                                let mut channel = None;
-                                app_clone.connections.execute(addr, |result| {
+                                app_clone1.connections.execute(addr, |result| {
                                     if result.is_err() { return; }
                                     let synac = result.unwrap();
 
-                                    channel = synac.state.channels.get(&channel_id).cloned();
+                                    if let Some(channel) = synac.state.channels.get(&channel_id) {
+                                        *app_clone1.stack_edit_channel.edit.borrow_mut() = Some(channel.id);
+                                        app_clone1.stack_edit_channel.name.set_text(&channel.name);
+                                        render_mode(&app_clone1.stack_edit_channel.mode_bots, channel.default_mode_bot);
+                                        render_mode(&app_clone1.stack_edit_channel.mode_users, channel.default_mode_user);
+                                    }
                                 });
-                                if let Some(channel) = channel {
-                                    *app_clone.stack_edit_channel.edit.borrow_mut() = Some(channel.id);
-                                    app_clone.stack_edit_channel.name.set_text(&channel.name);
-                                    render_mode(&app_clone.stack_edit_channel.mode_bots, channel.default_mode_bot);
-                                    render_mode(&app_clone.stack_edit_channel.mode_users, channel.default_mode_user);
-                                }
 
-                                app_clone.stack.set_visible_child(&app_clone.stack_edit_channel.container);
+                                app_clone1.stack.set_visible_child(&app_clone1.stack_edit_channel.container);
                             });
 
                             menu.add(&edit);
+
+                            let delete = MenuItem::new_with_label("Delete channel");
+
+                            let app_clone2 = Rc::clone(&app_clone);
+                            delete.connect_activate(move |_| {
+                                app_clone2.connections.execute(addr, |result| {
+                                    if result.is_err() { return; }
+                                    let synac = result.unwrap();
+
+                                    let result = synac.session.send(&Packet::ChannelDelete(common::ChannelDelete {
+                                        id: channel_id
+                                    }));
+                                    if let Err(err) = result {
+                                        eprintln!("failed to send packet: {}", err);
+                                    }
+                                });
+                            });
+
+                            menu.add(&delete);
                         }
 
                         menu.show_all();

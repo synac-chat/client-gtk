@@ -233,7 +233,8 @@ fn main() {
                 reset_token: false
             }));
             if let Err(err) = result {
-                alert(&app_clone.window, MessageType::Warning, &err.to_string());
+                let string = format!("failed to update server {}: {}", synac.addr, err.to_string());
+                alert(&app_clone.window, MessageType::Warning, &string);
             }
         });
 
@@ -605,7 +606,7 @@ fn main() {
                 };
 
                 if let Err(err) = synac.session.send(&packet) {
-                    alert(&app_clone.window, MessageType::Error, &err.to_string());
+                    eprintln!("error sending packet: {}", err);
                 }
             });
         }
@@ -640,7 +641,8 @@ fn main() {
                 }).map_err(Error::from)
             };
             if let Err(err) = result {
-                alert(&app.window, MessageType::Error, &err.to_string());
+                let string = format!("failed to load css: {}", err);
+                alert(&app.window, MessageType::Error, &string);
             }
             StyleContext::add_provider_for_screen(&screen, &css, STYLE_PROVIDER_PRIORITY_APPLICATION);
         }
