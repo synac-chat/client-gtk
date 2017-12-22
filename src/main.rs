@@ -190,7 +190,7 @@ fn main() {
         message_edit_id: RefCell::new(None),
         message_edit_input: Entry::new(),
         message_input: Revealer::new(),
-        messages: GtkBox::new(Orientation::Vertical, 10),
+        messages: GtkBox::new(Orientation::Vertical, 3),
         messages_scroll: ScrolledWindow::new(None, None),
         server_name: Label::new(""),
         servers: GtkBox::new(Orientation::Vertical, 2),
