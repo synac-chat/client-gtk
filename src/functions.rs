@@ -255,7 +255,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                         if let Some(channel) = synac.state.channels.get(&channel_id) {
                             if let Some(user) = synac.state.users.get(&synac.user) {
-                                let mode = synac::get_perm(&channel, &user);
+                                let mode = synac::get_mode(&channel, &user);
                                 can_read  = mode & common::PERM_READ == common::PERM_READ;
                                 can_write = mode & common::PERM_WRITE == common::PERM_WRITE;
                             }
@@ -300,7 +300,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                             if let Some(channel) = synac.state.channels.get(&channel_id) {
                                 if let Some(user) = synac.state.users.get(&synac.user) {
-                                    let mode = synac::get_perm(&channel, &user);
+                                    let mode = synac::get_mode(&channel, &user);
                                     manage_channels = mode & common::PERM_MANAGE_CHANNELS == common::PERM_MANAGE_CHANNELS;
                                     can_read        = mode & common::PERM_READ == common::PERM_READ;
                                 }
@@ -457,7 +457,7 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                             if let Some(channel) = synac.state.channels.get(&channel_id) {
                                 if let Some(user) = synac.state.users.get(&synac.user) {
-                                    has_perms = synac::get_perm(&channel, &user) & common::PERM_MANAGE_MESSAGES
+                                    has_perms = synac::get_mode(&channel, &user) & common::PERM_MANAGE_MESSAGES
                                                     == common::PERM_MANAGE_MESSAGES;
                                 }
                             }
@@ -523,7 +523,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
             app.users.add(&label);
 
             users.values().filter(|user| {
-                !user.ban && synac::get_perm(&channel, &user) & common::PERM_READ == common::PERM_READ
+                !user.ban && synac::get_mode(&channel, &user) & common::PERM_READ == common::PERM_READ
             }).for_each(&draw);
 
             let label = Label::new("Other:");
@@ -532,7 +532,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
             app.users.add(&label);
 
             users.values().filter(|user| {
-                !user.ban && synac::get_perm(&channel, &user) & common::PERM_READ != common::PERM_READ
+                !user.ban && synac::get_mode(&channel, &user) & common::PERM_READ != common::PERM_READ
             }).for_each(&draw);
 
             let label = Label::new("Banned:");
