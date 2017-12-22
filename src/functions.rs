@@ -250,23 +250,21 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                         if result.is_err() { return; }
                         let synac = result.unwrap();
 
-                        let mut can_read = true; // Assume yes because usually that's the case
-                        let mut can_write = true; // Assume yes because usually that's the case
+                        // Assume all to be sure.
+                        let mut mode = common::PERM_ALL;
 
                         if let Some(channel) = synac.state.channels.get(&channel_id) {
                             if let Some(user) = synac.state.users.get(&synac.user) {
-                                let mode = synac::get_mode(&channel, &user);
-                                can_read  = mode & common::PERM_READ == common::PERM_READ;
-                                can_write = mode & common::PERM_WRITE == common::PERM_WRITE;
+                                mode = synac::get_mode(&channel, &user);
                             }
                         }
 
-                        if !can_read {
+                        if mode & common::PERM_READ != common::PERM_READ {
                             alert(&app_clone.window, MessageType::Info, "You don't have permission to read this channel");
                             return;
                         }
 
-                        app_clone.message_input.set_reveal_child(can_write);
+                        app_clone.message_input.set_reveal_child(mode & common::PERM_WRITE == common::PERM_WRITE);
 
                         synac.current_channel = Some(channel_id);
                         app_clone.channel_name.set_text(&name);
@@ -291,8 +289,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                     if event.get_button() == 3 {
                         let menu = Menu::new();
 
-                        let mut manage_channels = false;
-                        let mut can_read = false;
+                        let mut mode = common::PERM_READ;
 
                         app_clone.connections.execute(addr, |result| {
                             if result.is_err() { return; }
@@ -300,18 +297,16 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                             if let Some(channel) = synac.state.channels.get(&channel_id) {
                                 if let Some(user) = synac.state.users.get(&synac.user) {
-                                    let mode = synac::get_mode(&channel, &user);
-                                    manage_channels = mode & common::PERM_MANAGE_CHANNELS == common::PERM_MANAGE_CHANNELS;
-                                    can_read        = mode & common::PERM_READ == common::PERM_READ;
+                                    mode = synac::get_mode(&channel, &user);
                                 }
                             }
                         });
 
-                        if !can_read {
+                        if mode & common::PERM_READ != common::PERM_READ {
                             return Inhibit(false);
                         }
 
-                        if manage_channels {
+                        if mode & common::PERM_MANAGE_CHANNELS == common::PERM_MANAGE_CHANNELS {
                             let edit = MenuItem::new_with_label("Edit channel");
 
                             let app_clone1 = Rc::clone(&app_clone);
@@ -360,8 +355,13 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                 });
                 app.channels.add(&button);
             }
+
+            if let Some(user) = synac.state.users.get(&synac.user) {
+                app.channel_add.set_reveal_child(user.admin);
+            }
         });
     } else {
+        app.channel_add.set_reveal_child(false);
         app.channel_name.set_text("");
         render_messages(None, &app);
         render_users(None, &app);
@@ -521,39 +521,92 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
                     if event.get_button() != 3 {
                         return Inhibit(false);
                     }
-                    let menu = Menu::new();
+                    let mut admin = false;
+                    let mut other_admin = None;
+                    let mut mode = 0;
 
-                    let edit_mode = MenuItem::new_with_label("Edit mode");
+                    app_clone.connections.execute(addr, |result| {
+                        if result.is_err() { return; }
+                        let synac = result.unwrap();
 
-                    let app_clone = Rc::clone(&app_clone);
-                    edit_mode.connect_activate(move |_| {
-                        app_clone.connections.execute(addr, |result| {
-                            if result.is_err() { return; }
-                            let synac = result.unwrap();
+                        let channel = synac.current_channel.and_then(|id| synac.state.channels.get(&id));
+                        if channel.is_none() { return; }
+                        let channel = channel.unwrap();
 
-                            let channel = synac.current_channel.and_then(|id| synac.state.channels.get(&id));
-                            let user = synac.state.users.get(&user_id);
+                        let user = synac.state.users.get(&synac.user);
+                        if user.is_none() { return; }
+                        let user = user.unwrap();
 
-                            if let Some(channel) = channel {
-                                if let Some(user) = user {
-                                    *app_clone.stack_edit_user.user.borrow_mut() = Some(user_id);
-                                    if user.modes.contains_key(&channel.id) {
-                                        app_clone.stack_edit_user.radio_some.set_active(true);
-                                        app_clone.stack_edit_user.mode.set_sensitive(true);
-                                    } else {
-                                        app_clone.stack_edit_user.radio_none.set_active(true);
-                                        app_clone.stack_edit_user.mode.set_sensitive(false);
-                                    }
-                                    let mode = synac::get_mode(&channel, &user);
-                                    render_mode(&app_clone.stack_edit_user.mode, mode);
+                        admin = user.admin;
+                        mode = synac::get_mode(channel, user);
 
-                                    app_clone.stack.set_visible_child(&app_clone.stack_edit_user.container);
-                                }
-                            }
-                        });
+                        other_admin = synac.state.users.get(&user_id).map(|user| user.admin);
                     });
 
-                    menu.add(&edit_mode);
+                    let menu = Menu::new();
+
+                    if mode & common::PERM_MANAGE_MODES == common::PERM_MANAGE_MODES {
+                        let edit_mode = MenuItem::new_with_label("Edit mode");
+
+                        let app_clone = Rc::clone(&app_clone);
+                        edit_mode.connect_activate(move |_| {
+                            app_clone.connections.execute(addr, |result| {
+                                if result.is_err() { return; }
+                                let synac = result.unwrap();
+
+                                let channel = synac.current_channel.and_then(|id| synac.state.channels.get(&id));
+                                let user = synac.state.users.get(&user_id);
+
+                                if let Some(channel) = channel {
+                                    if let Some(user) = user {
+                                        *app_clone.stack_edit_user.user.borrow_mut() = Some(user_id);
+                                        if user.modes.contains_key(&channel.id) {
+                                            app_clone.stack_edit_user.radio_some.set_active(true);
+                                            app_clone.stack_edit_user.mode.set_sensitive(true);
+                                        } else {
+                                            app_clone.stack_edit_user.radio_none.set_active(true);
+                                            app_clone.stack_edit_user.mode.set_sensitive(false);
+                                        }
+                                        let mode = synac::get_mode(&channel, &user);
+                                        render_mode(&app_clone.stack_edit_user.mode, mode);
+
+                                        app_clone.stack.set_visible_child(&app_clone.stack_edit_user.container);
+                                    }
+                                }
+                            });
+                        });
+
+                        menu.add(&edit_mode);
+                    }
+                    if let Some(other_admin) = other_admin {
+                        if admin {
+                            let toggle_admin = MenuItem::new_with_label(if other_admin {
+                                "Demote admin"
+                            } else {
+                                "Promote admin"
+                            });
+
+                            let app_clone = Rc::clone(&app_clone);
+                            toggle_admin.connect_activate(move |_| {
+                                app_clone.connections.execute(addr, |result| {
+                                    if result.is_err() { return; }
+                                    let synac = result.unwrap();
+
+                                    let result = synac.session.send(&Packet::UserUpdate(common::UserUpdate {
+                                        admin: Some(!other_admin),
+                                        ban: None,
+                                        channel_mode: None,
+                                        id: user_id
+                                    }));
+                                    if let Err(err) = result {
+                                        eprintln!("failed to send packet: {}", err);
+                                    }
+                                });
+                            });
+
+                            menu.add(&toggle_admin);
+                        }
+                    }
 
                     menu.show_all();
                     menu.popup_at_pointer(&**event);
@@ -575,7 +628,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
             // Don't worry, the following .cloned()s just copies the reference
 
             users.iter().cloned().filter(|user| {
-                !user.ban && synac::get_mode(&channel, &user) & common::PERM_READ == common::PERM_READ
+                !user.ban && synac::get_mode(channel, user) & common::PERM_READ == common::PERM_READ
             }).for_each(&draw);
 
             let label = Label::new("Other:");
@@ -584,7 +637,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
             app.users.add(&label);
 
             users.iter().cloned().filter(|user| {
-                !user.ban && synac::get_mode(&channel, &user) & common::PERM_READ != common::PERM_READ
+                !user.ban && synac::get_mode(channel, user) & common::PERM_READ != common::PERM_READ
             }).for_each(&draw);
 
             let label = Label::new("Banned:");

@@ -94,6 +94,7 @@ struct App {
     connections: Arc<Connections>,
     db: Rc<SqlConnection>,
 
+    channel_add: Revealer,
     channel_name: Label,
     channels: GtkBox,
     message_edit: Revealer,
@@ -180,6 +181,7 @@ fn main() {
     let radio_some = RadioButton::new_with_label_from_widget(&radio_none, "Use custom mode:");
 
     let app = Rc::new(App {
+        channel_add: Revealer::new(),
         channel_name: Label::new(""),
         channels: GtkBox::new(Orientation::Vertical, 2),
         connections: Connections::new(&db, nick),
@@ -226,6 +228,7 @@ fn main() {
         window: window
     });
 
+    app.channel_add.set_transition_type(RevealerTransitionType::SlideUp);
     app.message_edit.set_transition_type(RevealerTransitionType::SlideUp);
     app.message_input.set_transition_type(RevealerTransitionType::SlideUp);
     app.stack.set_transition_type(StackTransitionType::SlideLeftRight);
@@ -348,7 +351,8 @@ fn main() {
         app_clone.stack.set_visible_child(&app_clone.stack_edit_channel.container);
     });
 
-    channels_wrapper.add(&add);
+    app.channel_add.add(&add);
+    channels_wrapper.add(&app.channel_add);
     app.stack_main.add(&channels_wrapper);
     app.stack_main.add(&Separator::new(Orientation::Horizontal));
 
