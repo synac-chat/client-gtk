@@ -14,7 +14,13 @@ label.time {
 button.add {
     background: #56486d;
 }
-button:not(.add) {
+button:not(.add):not(.icon) {
     background: #a8a8a8;
     color: #161616;
+}
+button.icon, button.icon:active {
+    background: none;
+    box-shadow: none;
+    border: none;
+    outline: none;
 }

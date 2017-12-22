@@ -283,6 +283,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                         }
                     });
                     render_messages(Some(addr), &app_clone);
+                    render_users(Some(addr), &app_clone);
                 });
 
                 let app_clone = Rc::clone(&app);
@@ -363,6 +364,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
     } else {
         app.channel_name.set_text("");
         render_messages(None, &app);
+        render_users(None, &app);
     }
 
     app.channels.show_all();
@@ -494,4 +496,53 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
     }
     app.messages.show_all();
     app.messages.queue_draw();
+}
+pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
+    for child in app.users.get_children() {
+        app.users.remove(&child);
+    }
+    if let Some(addr) = addr {
+        app.connections.execute(addr, |result| {
+            if result.is_err() { return; }
+            let synac = result.unwrap();
+
+            let channel = synac.current_channel.and_then(|id| synac.state.channels.get(&id));
+            if channel.is_none() { return; }
+            let channel = channel.unwrap();
+
+            let draw = |user: &common::User| {
+                app.users.add(&Label::new(&*user.name));
+                app.users.add(&Separator::new(Orientation::Vertical));
+            };
+
+            let users = &synac.state.users;
+
+            let label = Label::new("This channel:");
+            add_class(&label, "bold");
+            label.set_xalign(0.0);
+            app.users.add(&label);
+
+            users.values().filter(|user| {
+                !user.ban && synac::get_perm(&channel, &user) & common::PERM_READ == common::PERM_READ
+            }).for_each(&draw);
+
+            let label = Label::new("Other:");
+            add_class(&label, "bold");
+            label.set_xalign(0.0);
+            app.users.add(&label);
+
+            users.values().filter(|user| {
+                !user.ban && synac::get_perm(&channel, &user) & common::PERM_READ != common::PERM_READ
+            }).for_each(&draw);
+
+            let label = Label::new("Banned:");
+            add_class(&label, "bold");
+            label.set_xalign(0.0);
+            app.users.add(&label);
+
+            users.values().filter(|user| user.ban).for_each(&draw);
+        });
+    }
+    app.users.show_all();
+    app.users.queue_draw();
 }

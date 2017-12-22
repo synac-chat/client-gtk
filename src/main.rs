@@ -25,6 +25,7 @@ use gtk::{
     DialogFlags,
     Entry,
     EventBox,
+    IconSize,
     InputPurpose,
     Label,
     Menu,
@@ -98,10 +99,12 @@ struct App {
     stack_edit_channel: EditChannel,
     stack_edit_server: EditServer,
     stack_main: GtkBox,
+    typing: Label,
     user_stack: Stack,
     user_stack_edit: Entry,
     user_stack_text: EventBox,
-    typing: Label,
+    users: GtkBox,
+    users_revealer: Revealer,
     window: Window
 }
 
@@ -196,10 +199,13 @@ fn main() {
         user_stack: Stack::new(),
         user_stack_edit: Entry::new(),
         user_stack_text: EventBox::new(),
+        users: GtkBox::new(Orientation::Vertical, 2),
+        users_revealer: Revealer::new(),
         typing: Label::new(""),
         window: window
     });
 
+    app.users_revealer.set_transition_type(RevealerTransitionType::SlideLeft);
     app.message_edit.set_transition_type(RevealerTransitionType::SlideUp);
     app.message_input.set_transition_type(RevealerTransitionType::SlideUp);
     app.stack.set_transition_type(StackTransitionType::SlideLeftRight);
@@ -256,7 +262,6 @@ fn main() {
     let servers_wrapper = GtkBox::new(Orientation::Vertical, 0);
 
     user_name.set_property_margin(10);
-
     app.user_stack_text.add(&user_name);
 
     let app_clone = Rc::clone(&app);
@@ -323,15 +328,30 @@ fn main() {
 
     channels_wrapper.add(&add);
     app.stack_main.add(&channels_wrapper);
-
     app.stack_main.add(&Separator::new(Orientation::Horizontal));
 
     let content = GtkBox::new(Orientation::Vertical, 2);
 
+    let header = GtkBox::new(Orientation::Horizontal, 2);
+
     add_class(&app.channel_name, "bold");
     app.channel_name.set_property_margin(10);
 
-    content.add(&app.channel_name);
+    header.add(&app.channel_name);
+
+    let toggle_users = Button::new_from_icon_name("user-available", IconSize::Menu.into());
+    add_class(&toggle_users, "icon");
+    toggle_users.set_hexpand(true);
+    toggle_users.set_halign(Align::End);
+
+    let app_clone = Rc::clone(&app);
+    toggle_users.connect_clicked(move |_| {
+        app_clone.users_revealer.set_reveal_child(!app_clone.users_revealer.get_reveal_child());
+    });
+
+    header.add(&toggle_users);
+
+    content.add(&header);
     content.add(&Separator::new(Orientation::Vertical));
 
     app.messages.set_valign(Align::End);
@@ -496,6 +516,11 @@ fn main() {
     content.add(&app.typing);
 
     app.stack_main.add(&content);
+    app.stack_main.add(&Separator::new(Orientation::Horizontal));
+
+    app.users.set_property_margin(30);
+    app.users_revealer.add(&app.users);
+    app.stack_main.add(&app.users_revealer);
 
     app.stack_edit_server.container.set_property_margin(10);
 
@@ -663,6 +688,7 @@ fn main() {
     gtk::idle_add(move || {
         let mut channels = false;
         let mut messages = false;
+        let mut users = false;
         let mut addr = None;
 
         let current_server = *app.connections.current_server.lock().unwrap();
@@ -678,6 +704,7 @@ fn main() {
                 Packet::ChannelDeleteReceive(_) => channels = true,
                 Packet::MessageReceive(_)       => messages = true,
                 Packet::MessageDeleteReceive(_) => messages = true,
+                Packet::UserReceive(_)          => users = true,
                 _ => {}
             }
         }) {
@@ -695,11 +722,13 @@ fn main() {
             });
         }
 
-        if let Some(addr) = addr {
+        if addr.is_some() {
             if channels {
-                render_channels(Some(addr), &app);
+                render_channels(addr, &app);
             } else if messages {
-                render_messages(Some(addr), &app);
+                render_messages(addr, &app);
+            } else if users {
+                render_users(addr, &app);
             }
         }
 
