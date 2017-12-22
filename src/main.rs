@@ -126,7 +126,7 @@ fn main() {
         }
     };
     db.execute("CREATE TABLE IF NOT EXISTS data (
-                    key     TEXT NOT NULL UNIQUE,
+                    key     TEXT NOT NULL PRIMARY KEY UNIQUE,
                     value   TEXT NOT NULL
                 )", &[])
         .expect("Couldn't create SQLite table");
@@ -242,6 +242,8 @@ fn main() {
                 alert(&app_clone.window, MessageType::Warning, &string);
             }
         });
+
+        app_clone.db.execute("REPLACE INTO data (key, value) VALUES ('nick', ?)", &[&text]).unwrap();
 
         *app_clone.connections.nick.write().unwrap() = text;
     });
