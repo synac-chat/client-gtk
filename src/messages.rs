@@ -18,13 +18,12 @@ impl Messages {
             Err(i) => i,
             Ok(mut i) => {
                 let original_timestamp = Some(messages[i].timestamp);
-                let original_id = Some(messages[i].id);
                 while i > 0 && messages.get(i-1).map(|msg| msg.timestamp) == original_timestamp {
                     i -= 1;
                 }
                 loop {
                     let message = messages.get_mut(i);
-                    if message.as_ref().map(|msg| msg.id) == original_id {
+                    if message.as_ref().map(|msg| msg.id) == Some(msg.id) {
                         *message.unwrap() = msg;
                         return;
                     }
@@ -33,7 +32,7 @@ impl Messages {
                     }
                     i += 1
                 }
-                i+1
+                i
             }
         };
         messages.insert(i, msg);
