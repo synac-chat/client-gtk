@@ -64,6 +64,7 @@ pub(crate) fn deselect_server(app: &Rc<App>) {
     app.connections.set_current(None);
     app.server_name.set_text("");
     app.message_edit.set_reveal_child(false);
+    app.message_input.set_reveal_child(false);
     render_channels(None, app);
 }
 pub(crate) fn render_mode(container: &GtkBox, bitmask: u8) {
@@ -246,31 +247,51 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                 let app_clone = Rc::clone(&app);
                 button.connect_clicked(move |_| {
                     app_clone.connections.execute(addr, |result| {
-                        if let Ok(synac) = result {
-                            synac.current_channel = Some(channel_id);
-                            app_clone.channel_name.set_text(&name);
-                            if !synac.messages.has(channel_id) {
-                                if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
-                                    after: None,
-                                    before: None,
-                                    channel: channel_id,
-                                    limit: common::LIMIT_BULK
-                                })) {
-                                    eprintln!("error sending packet: {}", err);
-                                }
+                        if result.is_err() { return; }
+                        let synac = result.unwrap();
+
+                        let mut can_read = true; // Assume yes because usually that's the case
+                        let mut can_write = true; // Assume yes because usually that's the case
+
+                        if let Some(channel) = synac.state.channels.get(&channel_id) {
+                            if let Some(user) = synac.state.users.get(&synac.user) {
+                                let mode = synac::get_perm(&channel, &user);
+                                can_read  = mode & common::PERM_READ == common::PERM_READ;
+                                can_write = mode & common::PERM_WRITE == common::PERM_WRITE;
+                            }
+                        }
+
+                        if !can_read {
+                            alert(&app_clone.window, MessageType::Info, "You don't have permission to read this channel");
+                            return;
+                        }
+
+                        app_clone.message_input.set_reveal_child(can_write);
+
+                        synac.current_channel = Some(channel_id);
+                        app_clone.channel_name.set_text(&name);
+
+                        if !synac.messages.has(channel_id) {
+                            if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
+                                after: None,
+                                before: None,
+                                channel: channel_id,
+                                limit: common::LIMIT_BULK
+                            })) {
+                                eprintln!("error sending packet: {}", err);
                             }
                         }
                     });
                     render_messages(Some(addr), &app_clone);
                 });
-                app.channels.add(&button);
 
                 let app_clone = Rc::clone(&app);
                 button.connect_button_press_event(move |_, event| {
                     if event.get_button() == 3 {
                         let menu = Menu::new();
 
-                        let mut has_perms = false;
+                        let mut manage_channels = false;
+                        let mut can_read = false;
 
                         app_clone.connections.execute(addr, |result| {
                             if result.is_err() { return; }
@@ -278,13 +299,18 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                             if let Some(channel) = synac.state.channels.get(&channel_id) {
                                 if let Some(user) = synac.state.users.get(&synac.user) {
-                                    has_perms = synac::get_perm(&channel, &user) & common::PERM_MANAGE_CHANNELS
-                                                    == common::PERM_MANAGE_CHANNELS;
+                                    let mode = synac::get_perm(&channel, &user);
+                                    manage_channels = mode & common::PERM_MANAGE_CHANNELS == common::PERM_MANAGE_CHANNELS;
+                                    can_read        = mode & common::PERM_READ == common::PERM_READ;
                                 }
                             }
                         });
 
-                        if has_perms {
+                        if !can_read {
+                            return Inhibit(false);
+                        }
+
+                        if manage_channels {
                             let edit = MenuItem::new_with_label("Edit channel");
 
                             let app_clone1 = Rc::clone(&app_clone);
@@ -331,6 +357,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                     }
                     Inhibit(false)
                 });
+                app.channels.add(&button);
             }
         });
     } else {

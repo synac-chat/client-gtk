@@ -41,6 +41,7 @@ use gtk::{
     Separator,
     SeparatorMenuItem,
     Stack,
+    StackTransitionType,
     StyleContext,
     STYLE_PROVIDER_PRIORITY_APPLICATION,
     Window,
@@ -88,6 +89,7 @@ struct App {
     message_edit: Revealer,
     message_edit_id: RefCell<Option<usize>>,
     message_edit_input: Entry,
+    message_input: Revealer,
     messages: GtkBox,
     messages_scroll: ScrolledWindow,
     server_name: Label,
@@ -169,6 +171,7 @@ fn main() {
         message_edit: Revealer::new(),
         message_edit_id: RefCell::new(None),
         message_edit_input: Entry::new(),
+        message_input: Revealer::new(),
         messages: GtkBox::new(Orientation::Vertical, 10),
         messages_scroll: ScrolledWindow::new(None, None),
         server_name: Label::new(""),
@@ -197,8 +200,10 @@ fn main() {
         window: window
     });
 
-    app.stack.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
-    app.user_stack.set_transition_type(gtk::StackTransitionType::Crossfade);
+    app.message_edit.set_transition_type(RevealerTransitionType::SlideUp);
+    app.message_input.set_transition_type(RevealerTransitionType::SlideUp);
+    app.stack.set_transition_type(StackTransitionType::SlideLeftRight);
+    app.user_stack.set_transition_type(StackTransitionType::Crossfade);
 
     app.stack.add(&app.stack_main);
     app.stack.add(&app.stack_edit_server.container);
@@ -365,8 +370,6 @@ fn main() {
     });
     content.add(&app.messages_scroll);
 
-    app.message_edit.set_transition_type(RevealerTransitionType::SlideUp);
-
     let message_edit = GtkBox::new(Orientation::Vertical, 2);
 
     message_edit.add(&Label::new("Edit message"));
@@ -484,7 +487,8 @@ fn main() {
         input.grab_focus();
     });
 
-    content.add(&input);
+    app.message_input.add(&input);
+    content.add(&app.message_input);
 
     app.typing.set_xalign(0.0);
     content.add(&app.typing);
