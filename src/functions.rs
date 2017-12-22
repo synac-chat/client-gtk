@@ -511,18 +511,70 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
             let channel = channel.unwrap();
 
             let draw = |user: &common::User| {
-                app.users.add(&Label::new(&*user.name));
+                let label = Label::new(&*user.name);
+                let event = EventBox::new();
+                event.add(&label);
+
+                let user_id = user.id;
+                let app_clone = Rc::clone(&app);
+                event.connect_button_press_event(move |_, event| {
+                    if event.get_button() != 3 {
+                        return Inhibit(false);
+                    }
+                    let menu = Menu::new();
+
+                    let edit_mode = MenuItem::new_with_label("Edit mode");
+
+                    let app_clone = Rc::clone(&app_clone);
+                    edit_mode.connect_activate(move |_| {
+                        app_clone.connections.execute(addr, |result| {
+                            if result.is_err() { return; }
+                            let synac = result.unwrap();
+
+                            let channel = synac.current_channel.and_then(|id| synac.state.channels.get(&id));
+                            let user = synac.state.users.get(&user_id);
+
+                            if let Some(channel) = channel {
+                                if let Some(user) = user {
+                                    *app_clone.stack_edit_user.user.borrow_mut() = Some(user_id);
+                                    if user.modes.contains_key(&channel.id) {
+                                        app_clone.stack_edit_user.radio_some.set_active(true);
+                                        app_clone.stack_edit_user.mode.set_sensitive(true);
+                                    } else {
+                                        app_clone.stack_edit_user.radio_none.set_active(true);
+                                        app_clone.stack_edit_user.mode.set_sensitive(false);
+                                    }
+                                    let mode = synac::get_mode(&channel, &user);
+                                    render_mode(&app_clone.stack_edit_user.mode, mode);
+
+                                    app_clone.stack.set_visible_child(&app_clone.stack_edit_user.container);
+                                }
+                            }
+                        });
+                    });
+
+                    menu.add(&edit_mode);
+
+                    menu.show_all();
+                    menu.popup_at_pointer(&**event);
+                    Inhibit(false)
+                });
+
+                app.users.add(&event);
                 app.users.add(&Separator::new(Orientation::Vertical));
             };
 
-            let users = &synac.state.users;
+            let mut users: Vec<_> = synac.state.users.values().collect();
+            users.sort_by_key(|user| &user.name);
 
             let label = Label::new("This channel:");
             add_class(&label, "bold");
             label.set_xalign(0.0);
             app.users.add(&label);
 
-            users.values().filter(|user| {
+            // Don't worry, the following .cloned()s just copies the reference
+
+            users.iter().cloned().filter(|user| {
                 !user.ban && synac::get_mode(&channel, &user) & common::PERM_READ == common::PERM_READ
             }).for_each(&draw);
 
@@ -531,7 +583,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
             label.set_xalign(0.0);
             app.users.add(&label);
 
-            users.values().filter(|user| {
+            users.iter().cloned().filter(|user| {
                 !user.ban && synac::get_mode(&channel, &user) & common::PERM_READ != common::PERM_READ
             }).for_each(&draw);
 
@@ -540,7 +592,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
             label.set_xalign(0.0);
             app.users.add(&label);
 
-            users.values().filter(|user| user.ban).for_each(&draw);
+            users.iter().cloned().filter(|user| user.ban).for_each(&draw);
         });
     }
     app.users.show_all();

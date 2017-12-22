@@ -35,6 +35,7 @@ use gtk::{
     Orientation,
     PolicyType,
     PositionType,
+    RadioButton,
     ResponseType,
     Revealer,
     RevealerTransitionType,
@@ -81,6 +82,14 @@ struct EditServer {
     server: Entry,
     hash: Entry
 }
+struct EditUser {
+    container: GtkBox,
+    user: RefCell<Option<usize>>,
+
+    radio_none: RadioButton,
+    radio_some: RadioButton,
+    mode: GtkBox
+}
 struct App {
     connections: Arc<Connections>,
     db: Rc<SqlConnection>,
@@ -98,6 +107,7 @@ struct App {
     stack: Stack,
     stack_edit_channel: EditChannel,
     stack_edit_server: EditServer,
+    stack_edit_user: EditUser,
     stack_main: GtkBox,
     typing: Label,
     user_stack: Stack,
@@ -166,6 +176,9 @@ fn main() {
     window.set_title("Synac GTK+ client");
     window.set_default_size(1000, 700);
 
+    let radio_none = RadioButton::new_with_label("Inherit channel's mode");
+    let radio_some = RadioButton::new_with_label_from_widget(&radio_none, "Use custom mode:");
+
     let app = Rc::new(App {
         channel_name: Label::new(""),
         channels: GtkBox::new(Orientation::Vertical, 2),
@@ -195,6 +208,14 @@ fn main() {
             server: Entry::new(),
             hash: Entry::new()
         },
+        stack_edit_user: EditUser {
+            container: GtkBox::new(Orientation::Vertical, 2),
+            user: RefCell::new(None),
+
+            radio_none: radio_none,
+            radio_some: radio_some,
+            mode: GtkBox::new(Orientation::Vertical, 2)
+        },
         stack_main: GtkBox::new(Orientation::Horizontal, 10),
         user_stack: Stack::new(),
         user_stack_edit: Entry::new(),
@@ -205,15 +226,16 @@ fn main() {
         window: window
     });
 
-    app.users_revealer.set_transition_type(RevealerTransitionType::SlideLeft);
     app.message_edit.set_transition_type(RevealerTransitionType::SlideUp);
     app.message_input.set_transition_type(RevealerTransitionType::SlideUp);
     app.stack.set_transition_type(StackTransitionType::SlideLeftRight);
     app.user_stack.set_transition_type(StackTransitionType::Crossfade);
+    app.users_revealer.set_transition_type(RevealerTransitionType::SlideLeft);
 
     app.stack.add(&app.stack_main);
     app.stack.add(&app.stack_edit_server.container);
     app.stack.add(&app.stack_edit_channel.container);
+    app.stack.add(&app.stack_edit_user.container);
 
     app.user_stack.add(&app.user_stack_text);
     app.user_stack.add(&app.user_stack_edit);
@@ -645,6 +667,68 @@ fn main() {
 
     edit_channel_controls.add(&edit_channel_ok);
     app.stack_edit_channel.container.add(&edit_channel_controls);
+
+    app.stack_edit_user.container.set_property_margin(10);
+
+    let app_clone = Rc::clone(&app);
+    app.stack_edit_user.radio_none.connect_toggled(move |radio_none| {
+        if radio_none.get_active() {
+            app_clone.stack_edit_user.mode.set_sensitive(false);
+        } else {
+            app_clone.stack_edit_user.mode.set_sensitive(true);
+        }
+    });
+
+    app.stack_edit_user.container.add(&app.stack_edit_user.radio_none);
+    app.stack_edit_user.container.add(&app.stack_edit_user.radio_some);
+
+    app.stack_edit_user.container.add(&app.stack_edit_user.mode);
+
+    let edit_user_controls = GtkBox::new(Orientation::Horizontal, 2);
+
+    let edit_user_cancel = Button::new_with_label("Cancel");
+
+    let app_clone = Rc::clone(&app);
+    edit_user_cancel.connect_clicked(move |_| {
+        app_clone.stack.set_visible_child(&app_clone.stack_main);
+    });
+
+    edit_user_controls.add(&edit_user_cancel);
+
+    let edit_user_ok = Button::new_with_label("Ok");
+
+    let app_clone = Rc::clone(&app);
+    edit_user_ok.connect_clicked(move |_| {
+        if let Some(addr) = *app_clone.connections.current_server.lock().unwrap() {
+            app_clone.connections.execute(addr, |result| {
+                if result.is_err() { return; }
+                let synac = result.unwrap();
+
+                if synac.current_channel.is_none() { return; }
+                let channel = synac.current_channel.unwrap();
+
+                let mode = if app_clone.stack_edit_user.radio_none.get_active() {
+                    None
+                } else {
+                    Some(get_mode(&app_clone.stack_edit_user.mode).unwrap())
+                };
+
+                let result = synac.session.send(&Packet::UserUpdate(common::UserUpdate {
+                    admin: None,
+                    ban: None,
+                    channel_mode: Some((channel, mode)),
+                    id: app_clone.stack_edit_user.user.borrow().expect("( ͡° ͜ʖ ͡°)")
+                }));
+                if let Err(result) = result {
+                    eprintln!("error sending packet: {}", result);
+                }
+            });
+            app_clone.stack.set_visible_child(&app_clone.stack_main);
+        }
+    });
+
+    edit_user_controls.add(&edit_user_ok);
+    app.stack_edit_user.container.add(&edit_user_controls);
 
     app.window.add(&app.stack);
 
