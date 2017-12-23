@@ -774,9 +774,7 @@ fn main() {
         Inhibit(false)
     });
 
-    gtk::idle_add(move || {
-        thread::sleep(Duration::from_millis(10));
-
+    gtk::timeout_add(10, move || {
         let mut channels = false;
         let mut messages = false;
         let mut users = false;
