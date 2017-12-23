@@ -59,6 +59,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
 use synac::common::{self, Packet};
 use xdg::BaseDirectories;
@@ -774,6 +775,8 @@ fn main() {
     });
 
     gtk::idle_add(move || {
+        thread::sleep(Duration::from_millis(10));
+
         let mut channels = false;
         let mut messages = false;
         let mut users = false;
