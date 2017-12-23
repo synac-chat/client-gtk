@@ -50,20 +50,20 @@ impl Synac {
 
 pub enum Connection {
     Connecting(JoinHandle<Result<Synac, Error>>),
-    Connected(Result<Synac, Error>)
+    Connected(Box<Result<Synac, Error>>)
 }
 impl Connection {
     pub fn join(&mut self) -> Result<&mut Synac, &mut Error> {
         let old = mem::replace(self, unsafe { mem::uninitialized() });
         let new = match old {
-            Connection::Connecting(handle) => Connection::Connected(handle.join().unwrap()),
+            Connection::Connecting(handle) => Connection::Connected(Box::new(handle.join().unwrap())),
             old @ Connection::Connected(_) => old
         };
         mem::forget(mem::replace(self, new));
 
         match *self {
             Connection::Connecting(_) => unreachable!(),
-            Connection::Connected(ref mut inner) => inner.as_mut()
+            Connection::Connected(ref mut inner) => (**inner).as_mut()
         }
     }
 }
@@ -143,7 +143,7 @@ impl Connections {
     }
     pub fn insert(&self, addr: SocketAddr, result: Synac) {
         self.servers.lock().unwrap()
-            .insert(addr, Connection::Connected(Ok(result)));
+            .insert(addr, Connection::Connected(Box::new(Ok(result))));
     }
     pub fn remove(&self, addr: SocketAddr) {
         self.servers.lock().unwrap()

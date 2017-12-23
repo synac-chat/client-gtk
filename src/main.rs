@@ -788,9 +788,9 @@ fn main() {
             }
             addr = Some(synac.addr);
             match packet {
-                Packet::ChannelReceive(_)       => channels = true,
+                Packet::ChannelReceive(_) |
                 Packet::ChannelDeleteReceive(_) => channels = true,
-                Packet::MessageReceive(_)       => messages = true,
+                Packet::MessageReceive(_) |
                 Packet::MessageDeleteReceive(_) => messages = true,
                 Packet::UserReceive(_)          => users = true,
                 _ => {}

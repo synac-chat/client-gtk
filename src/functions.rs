@@ -138,7 +138,7 @@ pub(crate) fn render_servers(app: &Rc<App>) {
         let token_clone: Rc<Option<String>> = Rc::clone(&token);
 
         let button = Button::new_with_label(&name);
-        let app_clone = Rc::clone(&app);
+        let app_clone = Rc::clone(app);
         button.connect_clicked(move |_| {
             let addr = match ip_parsed {
                 Some(addr) => addr,
@@ -162,7 +162,7 @@ pub(crate) fn render_servers(app: &Rc<App>) {
             }
         });
 
-        let app_clone = Rc::clone(&app);
+        let app_clone = Rc::clone(app);
         button.connect_button_press_event(move |_, event| {
             if event.get_button() == 3 {
                 let menu = Menu::new();
@@ -244,7 +244,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                 let channel_id = channel.id;
 
-                let app_clone = Rc::clone(&app);
+                let app_clone = Rc::clone(app);
                 button.connect_clicked(move |_| {
                     app_clone.connections.execute(addr, |result| {
                         if result.is_err() { return; }
@@ -255,7 +255,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                         if let Some(channel) = synac.state.channels.get(&channel_id) {
                             if let Some(user) = synac.state.users.get(&synac.user) {
-                                mode = synac::get_mode(&channel, &user);
+                                mode = synac::get_mode(channel, user);
                             }
                         }
 
@@ -284,7 +284,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                     render_users(Some(addr), &app_clone);
                 });
 
-                let app_clone = Rc::clone(&app);
+                let app_clone = Rc::clone(app);
                 button.connect_button_press_event(move |_, event| {
                     if event.get_button() == 3 {
                         let menu = Menu::new();
@@ -297,7 +297,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                             if let Some(channel) = synac.state.channels.get(&channel_id) {
                                 if let Some(user) = synac.state.users.get(&synac.user) {
-                                    mode = synac::get_mode(&channel, &user);
+                                    mode = synac::get_mode(channel, user);
                                 }
                             }
                         });
@@ -363,8 +363,8 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
     } else {
         app.channel_add.set_reveal_child(false);
         app.channel_name.set_text("");
-        render_messages(None, &app);
-        render_users(None, &app);
+        render_messages(None, app);
+        render_users(None, app);
     }
 
     app.channels.show_all();
@@ -424,7 +424,7 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
                 text.set_selectable(true);
                 text.set_xalign(0.0);
 
-                let app_clone = Rc::clone(&app);
+                let app_clone = Rc::clone(app);
                 let msg_id = msg.id;
                 let msg_mine = msg.author == synac.user;
 
@@ -457,7 +457,7 @@ pub(crate) fn render_messages(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                             if let Some(channel) = synac.state.channels.get(&channel_id) {
                                 if let Some(user) = synac.state.users.get(&synac.user) {
-                                    has_perms = synac::get_mode(&channel, &user) & common::PERM_MANAGE_MESSAGES
+                                    has_perms = synac::get_mode(channel, user) & common::PERM_MANAGE_MESSAGES
                                                     == common::PERM_MANAGE_MESSAGES;
                                 }
                             }
@@ -516,7 +516,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
                 event.add(&label);
 
                 let user_id = user.id;
-                let app_clone = Rc::clone(&app);
+                let app_clone = Rc::clone(app);
                 event.connect_button_press_event(move |_, event| {
                     if event.get_button() != 3 {
                         return Inhibit(false);
@@ -567,7 +567,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
                                             app_clone.stack_edit_user.radio_none.set_active(true);
                                             app_clone.stack_edit_user.mode.set_sensitive(false);
                                         }
-                                        let mode = synac::get_mode(&channel, &user);
+                                        let mode = synac::get_mode(channel, user);
                                         render_mode(&app_clone.stack_edit_user.mode, mode);
 
                                         app_clone.stack.set_visible_child(&app_clone.stack_edit_user.container);
