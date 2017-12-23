@@ -59,7 +59,6 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::thread;
 use std::time::{Duration, Instant};
 use synac::common::{self, Packet};
 use xdg::BaseDirectories;
