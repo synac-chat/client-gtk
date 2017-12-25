@@ -259,15 +259,15 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                             }
                         }
 
-                        if mode & common::PERM_READ != common::PERM_READ {
-                            alert(&app_clone.window, MessageType::Info, "You don't have permission to read this channel");
-                            return;
-                        }
-
                         app_clone.message_input.set_reveal_child(mode & common::PERM_WRITE == common::PERM_WRITE);
 
                         synac.current_channel = Some(channel_id);
                         app_clone.channel_name.set_text(&name);
+
+                        if mode & common::PERM_READ != common::PERM_READ {
+                            alert(&app_clone.window, MessageType::Info, "You don't have permission to read this channel");
+                            return;
+                        }
 
                         if !synac.messages.has(channel_id) {
                             if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
