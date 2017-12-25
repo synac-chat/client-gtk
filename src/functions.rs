@@ -21,6 +21,25 @@ pub(crate) fn alert(window: &Window, kind: MessageType, message: &str) {
     dialog.connect_response(|dialog, _| dialog.destroy());
     dialog.show_all();
 }
+pub(crate) fn confirm<F>(window: &Window, message: &str, callback: F)
+    where F: Fn() + 'static
+{
+    let dialog = MessageDialog::new(
+        Some(window),
+        DialogFlags::MODAL,
+        MessageType::Question,
+        ButtonsType::OkCancel,
+        message
+    );
+    dialog.connect_response(move |dialog, response| {
+        dialog.destroy();
+
+        if response == ResponseType::Ok.into() {
+            callback();
+        }
+    });
+    dialog.show_all();
+}
 pub(crate) fn connect(app: &Rc<App>, addr: SocketAddr, hash: String, token: Option<String>)
     -> Option<Error>
 {
@@ -522,8 +541,11 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
                         return Inhibit(false);
                     }
                     let mut admin = false;
-                    let mut other_admin = None;
+                    let mut id = 0;
                     let mut mode = 0;
+
+                    let mut other_admin = None;
+                    let mut other_ban = None;
 
                     app_clone.connections.execute(addr, |result| {
                         if result.is_err() { return; }
@@ -538,9 +560,12 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
                         let user = user.unwrap();
 
                         admin = user.admin;
+                        id = user.id;
                         mode = synac::get_mode(channel, user);
 
-                        other_admin = synac.state.users.get(&user_id).map(|user| user.admin);
+                        let other = synac.state.users.get(&user_id);
+                        other_admin = other.map(|user| user.admin);
+                        other_ban   = other.map(|user| user.ban);
                     });
 
                     let menu = Menu::new();
@@ -579,16 +604,16 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
                         menu.add(&edit_mode);
                     }
                     if let Some(other_admin) = other_admin {
-                        if admin {
+                        if admin && user_id != id {
                             let toggle_admin = MenuItem::new_with_label(if other_admin {
                                 "Demote admin"
                             } else {
                                 "Promote admin"
                             });
 
-                            let app_clone = Rc::clone(&app_clone);
+                            let app_clone1 = Rc::clone(&app_clone);
                             toggle_admin.connect_activate(move |_| {
-                                app_clone.connections.execute(addr, |result| {
+                                app_clone1.connections.execute(addr, |result| {
                                     if result.is_err() { return; }
                                     let synac = result.unwrap();
 
@@ -605,6 +630,44 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
                             });
 
                             menu.add(&toggle_admin);
+
+                            if let Some(other_ban) = other_ban {
+                                if !other_admin {
+                                    let toggle_ban = MenuItem::new_with_label(if other_ban {
+                                        "Unban user"
+                                    } else {
+                                        "Ban this user"
+                                    });
+
+                                    let app_clone2 = Rc::clone(&app_clone);
+                                    toggle_ban.connect_activate(move |_| {
+                                        let app_clone = Rc::clone(&app_clone2);
+                                        let text = if other_ban {
+                                            "Are you sure you want to unban this user?"
+                                        } else {
+                                            "Are you sure you want to ban this user?"
+                                        };
+                                        confirm(&app_clone2.window, text, move || {
+                                            app_clone.connections.execute(addr, |result| {
+                                                if result.is_err() { return; }
+                                                let synac = result.unwrap();
+
+                                                let result = synac.session.send(&Packet::UserUpdate(common::UserUpdate {
+                                                    admin: None,
+                                                    ban: Some(!other_ban),
+                                                    channel_mode: None,
+                                                    id: user_id
+                                                }));
+                                                if let Err(err) = result {
+                                                    eprintln!("failed to send packet: {}", err);
+                                                }
+                                            });
+                                        });
+                                    });
+
+                                    menu.add(&toggle_ban);
+                                }
+                            }
                         }
                     }
 
