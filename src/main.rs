@@ -9,6 +9,7 @@ extern crate xdg;
 mod connections;
 mod functions;
 mod messages;
+mod parser;
 mod typing;
 
 use failure::Error;
@@ -502,14 +503,47 @@ fn main() {
                     return;
                 }
                 let synac = result.unwrap();
+                if text.starts_with('!') {
+                    let mut args = parser::parse(&text[1..]);
+                    if args.len() < 2 {
+                        alert(&app_clone.window, MessageType::Info, "!<user> <command> [args...]");
+                        return;
+                    }
+
+                    let recipient = args.remove(0);
+
+                    let mut user_id = None;
+                    for user in synac.state.users.values() {
+                        if user.bot && user.name == recipient {
+                            user_id = Some(user.id);
+                            break;
+                        }
+                    }
+
+                    if user_id.is_none() {
+                        alert(&app_clone.window, MessageType::Warning, "No bot with that id.");
+                        return;
+                    }
+
+                    let result = synac.session.send(&Packet::Command(common::Command {
+                        args: args,
+                        recipient: user_id.unwrap()
+                    }));
+                    if let Err(err) = result {
+                        eprintln!("failed to send packet: {}", err);
+                        return;
+                    }
+                    return;
+                }
                 if synac.current_channel.is_none() {
                     return;
                 }
                 let channel = synac.current_channel.unwrap();
-                if let Err(err) = synac.session.send(&Packet::MessageCreate(common::MessageCreate {
+                let result = synac.session.send(&Packet::MessageCreate(common::MessageCreate {
                     channel: channel,
                     text: text.into_bytes()
-                })) {
+                }));
+                if let Err(err) = result {
                     if let Ok(io_err) = err.downcast::<IoError>() {
                         if io_err.kind() != IoErrorKind::BrokenPipe {
                             return;
