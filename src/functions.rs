@@ -285,7 +285,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                         app_clone.channel_name.set_text(&name);
 
                         if mode & common::PERM_READ != common::PERM_READ {
-                            alert(&app_clone.window, MessageType::Info, "You don't have permission to read messages this channel");
+                            alert(&app_clone.window, MessageType::Info, "You don't have the read permission for this channel");
                             return;
                         }
 
