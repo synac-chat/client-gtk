@@ -302,6 +302,17 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                     });
                     render_messages(Some(addr), &app_clone);
                     render_users(Some(addr), &app_clone);
+
+                    // Wait until messages are properly rendered
+
+                    let app_clone = Rc::clone(&app_clone);
+                    gtk::idle_add(move || {
+                        if let Some(vadjustment) = app_clone.messages_scroll.get_vadjustment() {
+                            vadjustment.set_value(vadjustment.get_upper());
+                        }
+                        // Only do this once.
+                        Continue(false)
+                    });
                 });
 
                 let app_clone = Rc::clone(app);
