@@ -564,6 +564,8 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
 
             let draw = |user: &common::User| {
                 let label = Label::new(&*user.name);
+                label.set_xalign(0.0);
+                label.set_margin_left(10);
                 let event = EventBox::new();
                 event.add(&label);
 
