@@ -813,25 +813,28 @@ fn main() {
     });
 
     gtk::timeout_add(10, move || {
+        let mut addr = None;
+        let mut channel_id = None;
         let mut channels = false;
         let mut messages = false;
+        let mut new_message = false;
         let mut users = false;
-        let mut addr = None;
 
         let current_server = *app.connections.current_server.lock().unwrap();
 
-        if let Err(err) = app.connections.try_read(|synac, packet| {
+        if let Err(err) = app.connections.try_read(|synac, packet, channel| {
             println!("received {:?}", packet);
             if current_server != Some(synac.addr) {
                 return;
             }
             addr = Some(synac.addr);
+            channel_id = channel;
             match packet {
                 Packet::ChannelReceive(_) |
                 Packet::ChannelDeleteReceive(_) => channels = true,
-                Packet::MessageReceive(_) |
+                Packet::MessageReceive(e)       => { messages = true; new_message = e.new; },
                 Packet::MessageDeleteReceive(_) => messages = true,
-                Packet::UserReceive(_)          => users = true,
+                Packet::UserReceive(_) => users = true,
                 _ => {}
             }
         }) {
@@ -849,13 +852,26 @@ fn main() {
             });
         }
 
-        if addr.is_some() {
+        if let Some(addr_) = addr {
             if channels {
                 render_channels(addr, &app);
             } else if messages {
                 render_messages(addr, &app);
             } else if users {
                 render_users(addr, &app);
+            }
+
+            if new_message {
+                if let Some(channel_id) = channel_id {
+                    let mut stmt = app.db.prepare_cached(
+                        "SELECT COUNT(*) FROM muted WHERE channel = ? AND server = ?"
+                    ).unwrap();
+                    let count: i64 = stmt.query_row(&[&(channel_id as i64), &addr_.to_string()], |row| row.get(0)).unwrap();
+
+                    if count == 0 {
+                        println!("notification in {}", channel_id);
+                    }
+                }
             }
         }
 

@@ -37,12 +37,14 @@ impl Messages {
         };
         messages.insert(i, msg);
     }
-    pub fn remove(&mut self, id: usize) {
-        for messages in self.messages.values_mut() {
+    pub fn remove(&mut self, id: usize) -> Option<usize> {
+        for (channel, messages) in &mut self.messages {
             if let Some(i) = messages.iter().position(|msg| msg.id == id) {
                 messages.remove(i);
+                return Some(*channel);
             }
         }
+        None
     }
     pub fn get(&self, channel: usize) -> &[Message] {
         self.messages.get(&channel).map(|inner| &*inner as &[Message]).unwrap_or(&[])

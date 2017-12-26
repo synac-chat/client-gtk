@@ -173,7 +173,7 @@ impl Connections {
         }
     }
     pub fn try_read<F>(&self, mut callback: F) -> Result<(), Error>
-        where F: FnMut(&mut Synac, Packet)
+        where F: FnMut(&mut Synac, Packet, Option<usize>)
     {
         if let Ok(mut servers) = self.servers.try_lock() {
             for server in servers.values_mut() {
@@ -181,16 +181,20 @@ impl Connections {
                     let read = synac.listener.try_read(synac.session.inner_stream())?;
                     if let Some(packet) = read {
                         synac.state.update(&packet);
-                        match packet {
-                            Packet::MessageReceive(ref event) =>
-                                synac.messages.add(event.inner.clone()),
+                        let channel = match packet {
+                            Packet::MessageReceive(ref event) => {
+                                synac.messages.add(event.inner.clone());
+                                Some(event.inner.channel)
+                            }
                             Packet::MessageDeleteReceive(ref msg) =>
                                 synac.messages.remove(msg.id),
-                            Packet::TypingReceive(ref event) if event.author != synac.user =>
-                                synac.typing.insert(event.author, event.channel),
-                            _ => {}
-                        }
-                        callback(synac, packet);
+                            Packet::TypingReceive(ref event) if event.author != synac.user => {
+                                synac.typing.insert(event.author, event.channel);
+                                Some(event.channel)
+                            },
+                            _ => None
+                        };
+                        callback(synac, packet, channel);
                     }
                 }
             }
