@@ -222,6 +222,7 @@ pub(crate) fn render_servers(app: &Rc<App>) {
                 let addr = Rc::clone(&addr);
                 forget.connect_activate(move |_| {
                     app_clone2.db.execute("DELETE FROM servers WHERE ip = ?", &[&*addr]).unwrap();
+                    app_clone2.db.execute("DELETE FROM muted WHERE server = ?", &[&*addr]).unwrap();
                     if let Some(parsed) = ip_parsed {
                         app_clone2.connections.remove(parsed);
                         if *app_clone2.connections.current_server.lock().unwrap() == Some(parsed) {
@@ -321,10 +322,6 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                             }
                         });
 
-                        if mode & common::PERM_READ != common::PERM_READ {
-                            return Inhibit(false);
-                        }
-
                         if mode & common::PERM_MANAGE_CHANNELS == common::PERM_MANAGE_CHANNELS {
                             let edit = MenuItem::new_with_label("Edit channel");
 
@@ -366,6 +363,31 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
 
                             menu.add(&delete);
                         }
+
+                        let mut stmt = app_clone.db.prepare_cached(
+                            "SELECT COUNT(*) FROM muted WHERE channel = ? AND server = ?"
+                        ).unwrap();
+                        let count: i64 = stmt.query_row(&[&(channel_id as i64), &addr.to_string()], |row| row.get(0)).unwrap();
+
+                        let mute = MenuItem::new_with_label(if count == 0 {
+                            "Mute channel"
+                        } else {
+                            "Unmute channel"
+                        });
+
+                        let app_clone3 = Rc::clone(&app_clone);
+                        mute.connect_activate(move |_| {
+                            app_clone3.db.execute(
+                                if count == 0 {
+                                    "INSERT INTO muted (channel, server) VALUES (?, ?)"
+                                } else {
+                                    "DELETE FROM muted WHERE channel = ? AND server = ?"
+                                },
+                                &[&(channel_id as i64), &addr.to_string()]
+                            ).unwrap();
+                        });
+
+                        menu.add(&mute);
 
                         menu.show_all();
                         menu.popup_at_pointer(&**event);

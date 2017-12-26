@@ -152,6 +152,11 @@ fn main() {
                     token   TEXT
                 )", &[])
         .expect("Couldn't create SQLite table");
+    db.execute("CREATE TABLE IF NOT EXISTS muted (
+                    channel INTEGER NOT NULL,
+                    server  TEXT    NOT NULL
+                )", &[])
+        .expect("Couldn't create SQLite table");
 
     let nick = {
         let mut stmt = db.prepare("SELECT value FROM data WHERE key = 'nick'").unwrap();
