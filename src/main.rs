@@ -393,6 +393,7 @@ fn main() {
     app.messages_scroll.add(&app.messages);
 
     app.messages_scroll.set_policy(PolicyType::Never, PolicyType::Always);
+    app.messages_scroll.set_overlay_scrolling(false);
 
     app.messages_scroll.get_vadjustment().unwrap().connect_changed(move |vadjustment| {
         let upper = vadjustment.get_upper() - vadjustment.get_page_size();
