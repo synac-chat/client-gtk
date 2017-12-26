@@ -2,6 +2,7 @@
 extern crate chrono;
 extern crate gdk;
 extern crate gtk;
+extern crate notify_rust;
 extern crate rusqlite;
 extern crate synac;
 extern crate xdg;
@@ -52,6 +53,7 @@ use gtk::{
 };
 use connections::Connections;
 use functions::*;
+use notify_rust::Notification;
 use rusqlite::Connection as SqlConnection;
 use std::cell::RefCell;
 use std::env;
@@ -813,28 +815,52 @@ fn main() {
     });
 
     gtk::timeout_add(10, move || {
-        let mut addr = None;
-        let mut channel_id = None;
         let mut channels = false;
         let mut messages = false;
-        let mut new_message = false;
         let mut users = false;
 
         let current_server = *app.connections.current_server.lock().unwrap();
 
-        if let Err(err) = app.connections.try_read(|synac, packet, channel| {
+        if let Err(err) = app.connections.try_read(|synac, packet, channel_id| {
             println!("received {:?}", packet);
             if current_server != Some(synac.addr) {
                 return;
             }
-            addr = Some(synac.addr);
-            channel_id = channel;
+            let channel = channel_id.and_then(|id| synac.state.channels.get(&id));
             match packet {
                 Packet::ChannelReceive(_) |
                 Packet::ChannelDeleteReceive(_) => channels = true,
-                Packet::MessageReceive(e)       => { messages = true; new_message = e.new; },
+                Packet::MessageReceive(e) => {
+                    messages = true;
+
+                    if e.new {
+                        if let Some(channel) = channel {
+                            let msg = &e.inner;
+                            if let Some(author) = synac.state.users.get(&msg.author) {
+                                let mut stmt = app.db.prepare_cached(
+                                    "SELECT COUNT(*) FROM muted WHERE channel = ? AND server = ?"
+                                ).unwrap();
+                                let count: i64 = stmt.query_row(
+                                    &[&(channel.id as i64), &synac.addr.to_string()],
+                                    |row| row.get(0)
+                                ).unwrap();
+
+                                if count == 0 {
+                                    let result =
+                                        Notification::new()
+                                            .summary(&format!("{} (#{})", author.name, channel.name))
+                                            .body(&*String::from_utf8_lossy(&msg.text))
+                                            .show();
+                                    if let Err(err) = result {
+                                        eprintln!("error showing notification: {}", err);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 Packet::MessageDeleteReceive(_) => messages = true,
-                Packet::UserReceive(_) => users = true,
+                Packet::UserReceive(_)          => users = true,
                 _ => {}
             }
         }) {
@@ -852,26 +878,13 @@ fn main() {
             });
         }
 
-        if let Some(addr_) = addr {
+        if current_server.is_some() {
             if channels {
-                render_channels(addr, &app);
+                render_channels(current_server, &app);
             } else if messages {
-                render_messages(addr, &app);
+                render_messages(current_server, &app);
             } else if users {
-                render_users(addr, &app);
-            }
-
-            if new_message {
-                if let Some(channel_id) = channel_id {
-                    let mut stmt = app.db.prepare_cached(
-                        "SELECT COUNT(*) FROM muted WHERE channel = ? AND server = ?"
-                    ).unwrap();
-                    let count: i64 = stmt.query_row(&[&(channel_id as i64), &addr_.to_string()], |row| row.get(0)).unwrap();
-
-                    if count == 0 {
-                        println!("notification in {}", channel_id);
-                    }
-                }
+                render_users(current_server, &app);
             }
         }
 
