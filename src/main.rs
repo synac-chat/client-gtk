@@ -836,23 +836,25 @@ fn main() {
                     if e.new {
                         if let Some(channel) = channel {
                             let msg = &e.inner;
-                            if let Some(author) = synac.state.users.get(&msg.author) {
-                                let mut stmt = app.db.prepare_cached(
-                                    "SELECT COUNT(*) FROM muted WHERE channel = ? AND server = ?"
-                                ).unwrap();
-                                let count: i64 = stmt.query_row(
-                                    &[&(channel.id as i64), &synac.addr.to_string()],
-                                    |row| row.get(0)
-                                ).unwrap();
+                            if msg.author != synac.user {
+                                if let Some(author) = synac.state.users.get(&msg.author) {
+                                    let mut stmt = app.db.prepare_cached(
+                                        "SELECT COUNT(*) FROM muted WHERE channel = ? AND server = ?"
+                                    ).unwrap();
+                                    let count: i64 = stmt.query_row(
+                                        &[&(channel.id as i64), &synac.addr.to_string()],
+                                        |row| row.get(0)
+                                    ).unwrap();
 
-                                if count == 0 {
-                                    let result =
-                                        Notification::new()
-                                            .summary(&format!("{} (#{})", author.name, channel.name))
-                                            .body(&*String::from_utf8_lossy(&msg.text))
-                                            .show();
-                                    if let Err(err) = result {
-                                        eprintln!("error showing notification: {}", err);
+                                    if count == 0 {
+                                        let result =
+                                            Notification::new()
+                                                .summary(&format!("{} (#{})", author.name, channel.name))
+                                                .body(&*String::from_utf8_lossy(&msg.text))
+                                                .show();
+                                        if let Err(err) = result {
+                                            eprintln!("error showing notification: {}", err);
+                                        }
                                     }
                                 }
                             }
