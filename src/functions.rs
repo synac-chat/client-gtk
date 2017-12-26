@@ -285,7 +285,7 @@ pub(crate) fn render_channels(addr: Option<SocketAddr>, app: &Rc<App>) {
                         app_clone.channel_name.set_text(&name);
 
                         if mode & common::PERM_READ != common::PERM_READ {
-                            alert(&app_clone.window, MessageType::Info, "You don't have permission to read this channel");
+                            alert(&app_clone.window, MessageType::Info, "You don't have permission to read messages this channel");
                             return;
                         }
 
@@ -669,7 +669,7 @@ pub(crate) fn render_users(addr: Option<SocketAddr>, app: &Rc<App>) {
                                     let toggle_ban = MenuItem::new_with_label(if other_ban {
                                         "Unban user"
                                     } else {
-                                        "Ban this user"
+                                        "Ban user"
                                     });
 
                                     let app_clone2 = Rc::clone(&app_clone);
