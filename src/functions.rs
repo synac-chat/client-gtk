@@ -496,7 +496,7 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                 let text = Label::new(None);
                 text.set_line_wrap(true);
                 text.set_line_wrap_mode(WrapMode::WordChar);
-                text.set_text(&output); // In case set_markup fails.
+                text.set_text(&string); // In case set_markup fails.
                 text.set_markup(&output);
                 text.set_selectable(true);
                 text.set_xalign(0.0);
