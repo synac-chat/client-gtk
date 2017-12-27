@@ -1,5 +1,5 @@
 use chrono::prelude::*;
-use linkify::LinkFinder;
+use linkify::{LinkFinder, LinkKind};
 use pulldown_cmark::{html as md_html, Parser as MDParser};
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -78,23 +78,21 @@ pub fn format_timestamp(output: &mut String, timestamp: i64) {
     output.push_str(if is_pm { "PM" } else { "AM" });
 }
 pub fn markdown(input: &str) -> String {
-    let mut output = String::with_capacity(input.len());
-    md_html::push_html(&mut output, MDParser::new(&input));
+    let mut output = input.to_string();
+
+    let mut finder = LinkFinder::new();
+    finder.kinds(&[LinkKind::Url]);
+    let mut added = 0;
+
+    for link in finder.links(&input) {
+        output.insert(added + link.end(), '>');
+        output.insert(added + link.start(), '<');
+        added += 1 + 1;
+    }
 
     let input = output;
-    let mut output = input.clone();
-
-    let finder = LinkFinder::new();
-    let mut added = 0;
-    for link in finder.links(&input) {
-        let mut string = String::with_capacity(9 + (link.end() - link.start()) + 2);
-        string.push_str("<a href=\"");
-        string.push_str(link.as_str());
-        string.push_str("\">");
-        output.insert_str(added + link.end(), "</a>");
-        output.insert_str(added + link.start(), &string);
-        added += 9 + (link.end() - link.start()) + 2 + 4;
-    }
+    let mut output = String::with_capacity(input.len());
+    md_html::push_html(&mut output, MDParser::new(&input));
 
     output
 }
