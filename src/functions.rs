@@ -474,10 +474,10 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                     authorbox.add(&Separator::new(Orientation::Horizontal));
 
                     let mut time = String::with_capacity(32); // just a guess
-                    messages::format(&mut time, msg.timestamp);
+                    messages::format_timestamp(&mut time, msg.timestamp);
                     if let Some(edit) = msg.timestamp_edit {
                         time.push_str(" (edited ");
-                        messages::format(&mut time, edit);
+                        messages::format_timestamp(&mut time, edit);
                         time.push(')');
                     }
                     let time = Label::new(&*time);
@@ -491,13 +491,12 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                 }
 
                 let string = Rc::new(String::from_utf8_lossy(&msg.text).into_owned());
-
-                let mut output = String::with_capacity(string.len());
-                md_html::push_html(&mut output, MDParser::new(&string));
+                let output = messages::markdown(&string);
 
                 let text = Label::new(None);
                 text.set_line_wrap(true);
                 text.set_line_wrap_mode(WrapMode::WordChar);
+                text.set_text(&output); // In case set_markup fails.
                 text.set_markup(&output);
                 text.set_selectable(true);
                 text.set_xalign(0.0);

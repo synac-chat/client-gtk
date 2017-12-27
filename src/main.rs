@@ -2,6 +2,7 @@
 extern crate chrono;
 extern crate gdk;
 extern crate gtk;
+extern crate linkify;
 extern crate notify_rust;
 extern crate pango;
 extern crate pulldown_cmark;
@@ -57,7 +58,6 @@ use connections::{Connections, Synac};
 use functions::*;
 use notify_rust::Notification;
 use pango::WrapMode;
-use pulldown_cmark::{html as md_html, Parser as MDParser};
 use rusqlite::Connection as SqlConnection;
 use std::cell::RefCell;
 use std::env;
