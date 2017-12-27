@@ -833,10 +833,12 @@ fn main() {
             }
             let channel = channel_id.and_then(|id| synac.state.channels.get(&id));
             match packet {
-                Packet::ChannelReceive(_) |
-                Packet::ChannelDeleteReceive(_) => channels = true,
+                Packet::ChannelDeleteReceive(_) |
+                Packet::ChannelReceive(_) => channels = true,
+                Packet::MessageDeleteReceive(_) |
+                Packet::MessageListReceived => messages = true,
                 Packet::MessageReceive(e) => {
-                    messages = true;
+                    messages = e.new;
 
                     let msg = &e.inner;
                     if e.new && msg.author != synac.user && !app.window.is_active() {
@@ -864,8 +866,7 @@ fn main() {
                         }
                     }
                 },
-                Packet::MessageDeleteReceive(_) => messages = true,
-                Packet::UserReceive(_)          => users = true,
+                Packet::UserReceive(_) => users = true,
                 _ => {}
             }
         }) {
