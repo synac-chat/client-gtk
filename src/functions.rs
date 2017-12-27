@@ -493,6 +493,7 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                 let string = String::from_utf8_lossy(&msg.text).into_owned();
                 let text = Label::new(&*string);
                 text.set_line_wrap(true);
+                text.set_line_wrap_mode(WrapMode::WordChar);
                 text.set_selectable(true);
                 text.set_xalign(0.0);
 

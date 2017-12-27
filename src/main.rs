@@ -3,6 +3,7 @@ extern crate chrono;
 extern crate gdk;
 extern crate gtk;
 extern crate notify_rust;
+extern crate pango;
 extern crate rusqlite;
 extern crate synac;
 extern crate xdg;
@@ -54,6 +55,7 @@ use gtk::{
 use connections::{Connections, Synac};
 use functions::*;
 use notify_rust::Notification;
+use pango::WrapMode;
 use rusqlite::Connection as SqlConnection;
 use std::cell::RefCell;
 use std::env;
