@@ -177,6 +177,17 @@ pub(crate) fn select_channel(app: &Rc<App>, synac: &mut Synac, channel_id: usize
 
     render_messages(&app, Some(synac));
     render_users(&app,    Some(synac));
+
+    // Wait until messages are properly rendered
+
+    let app = Rc::clone(&app);
+    gtk::idle_add(move || {
+        if let Some(vadjustment) = app.messages_scroll.get_vadjustment() {
+            vadjustment.set_value(vadjustment.get_upper());
+        }
+        // Only do this once.
+        Continue(false)
+    });
 }
 pub(crate) fn render_servers(app: &Rc<App>) {
     for child in app.servers.get_children() {
@@ -324,17 +335,6 @@ pub(crate) fn render_channels(app: &Rc<App>, synac: Option<&mut Synac>) {
                     let synac = result.unwrap();
 
                     select_channel(&app_clone, synac, channel_id);
-                });
-
-                // Wait until messages are properly rendered
-
-                let app_clone = Rc::clone(&app_clone);
-                gtk::idle_add(move || {
-                    if let Some(vadjustment) = app_clone.messages_scroll.get_vadjustment() {
-                        vadjustment.set_value(vadjustment.get_upper());
-                    }
-                    // Only do this once.
-                    Continue(false)
                 });
             });
 
