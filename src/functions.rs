@@ -175,12 +175,15 @@ pub(crate) fn select_channel(app: &Rc<App>, synac: &mut Synac, channel_id: usize
         }
     }
 
-    render_messages(&app, Some(synac));
-    render_users(&app,    Some(synac));
+    render_messages(app, Some(synac));
+    render_users(app,    Some(synac));
 
+    scroll_to_bottom(app);
+}
+pub(crate) fn scroll_to_bottom(app: &Rc<App>) {
     // Wait until messages are properly rendered
 
-    let app = Rc::clone(&app);
+    let app = Rc::clone(app);
     gtk::idle_add(move || {
         if let Some(vadjustment) = app.messages_scroll.get_vadjustment() {
             vadjustment.set_value(vadjustment.get_upper());

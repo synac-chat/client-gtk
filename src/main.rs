@@ -835,8 +835,11 @@ fn main() {
             match packet {
                 Packet::ChannelDeleteReceive(_) |
                 Packet::ChannelReceive(_) => channels = true,
-                Packet::MessageDeleteReceive(_) |
-                Packet::MessageListReceived => messages = true,
+                Packet::MessageDeleteReceive(_) => messages = true,
+                Packet::MessageListReceived => {
+                    messages = true;
+                    scroll_to_bottom(&app);
+                }
                 Packet::MessageReceive(e) => {
                     messages = e.new;
 
