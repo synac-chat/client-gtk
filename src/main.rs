@@ -51,7 +51,7 @@ use gtk::{
     Window,
     WindowType
 };
-use connections::Connections;
+use connections::{Connections, Synac};
 use functions::*;
 use notify_rust::Notification;
 use rusqlite::Connection as SqlConnection;
@@ -871,22 +871,21 @@ fn main() {
 
         if let Some(addr) = current_server {
             app.connections.execute(addr, |result| {
-                if let Ok(synac) = result {
-                    if let Some(typing) = synac.typing.check(synac.current_channel, &synac.state) {
-                        app.typing.set_text(&typing);
-                    }
+                if result.is_err() { return; }
+                let synac = result.unwrap();
+
+                if channels {
+                    render_channels(&app, Some(synac));
+                } else if messages {
+                    render_messages(&app, Some(synac));
+                } else if users {
+                    render_users(&app,    Some(synac));
+                }
+
+                if let Some(typing) = synac.typing.check(synac.current_channel, &synac.state) {
+                    app.typing.set_text(&typing);
                 }
             });
-        }
-
-        if current_server.is_some() {
-            if channels {
-                render_channels(current_server, &app);
-            } else if messages {
-                render_messages(current_server, &app);
-            } else if users {
-                render_users(current_server, &app);
-            }
         }
 
         Continue(true)
