@@ -10,8 +10,7 @@ linkify = "0.2.0"
 notify-rust = "3.4.2"
 pango = "0.3.0"
 rusqlite = "0.13.0"
-#synac = "0.3.1"
-synac = { path = "../synac-rs" }
+synac = "0.4.0"
 xdg = "2.1.0"
 
 [dependencies.gtk]
