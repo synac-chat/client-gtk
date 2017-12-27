@@ -169,17 +169,17 @@ pub(crate) fn render_servers(app: &Rc<App>) {
             };
             println!("server with ip {} was clicked", addr);
             app_clone.server_name.set_text(&name_clone);
-            let mut ok = false;
+            let mut err = true;
             app_clone.connections.execute(addr, |result| {
-                ok = result.is_ok();
+                err = result.is_err();
+
                 if let Ok(synac) = result {
                     render_channels(&app_clone, Some(synac));
+                    app_clone.connections.set_current(Some(addr));
+                    app_clone.message_edit.set_reveal_child(false);
                 }
             });
-            if ok {
-                app_clone.connections.set_current(Some(addr));
-                app_clone.message_edit.set_reveal_child(false);
-            } else {
+            if err {
                 connect(&app_clone, addr, (*hash_clone).clone(), (*token_clone).clone());
             }
         });
