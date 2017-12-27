@@ -137,6 +137,47 @@ pub(crate) fn get_mode(container: &GtkBox) -> Option<u8> {
 
     Some(bitmask)
 }
+pub(crate) fn select_channel(app: &Rc<App>, synac: &mut Synac, channel_id: usize) {
+    // Scope here so channel_name is dropped.
+    // Can't wait for non-lexical lifetimes!
+    let mut channel_name = String::new();
+
+    // Assume all to be sure.
+    let mut mode = common::PERM_ALL;
+
+    if let Some(channel) = synac.state.channels.get(&channel_id) {
+        channel_name.reserve(1 + channel.name.len());
+        channel_name.push('#');
+        channel_name.push_str(&channel.name);
+
+        if let Some(user) = synac.state.users.get(&synac.user) {
+            mode = synac::get_mode(channel, user);
+        }
+    }
+
+    app.message_input.set_reveal_child(mode & common::PERM_WRITE == common::PERM_WRITE);
+
+    synac.current_channel = Some(channel_id);
+    app.channel_name.set_text(&channel_name);
+
+    if mode & common::PERM_READ != common::PERM_READ {
+        alert(&app.window, MessageType::Info, "You don't have the read permission for this channel");
+    } else {
+        if !synac.messages.has(channel_id) {
+            if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
+                after: None,
+                before: None,
+                channel: channel_id,
+                limit: common::LIMIT_BULK
+            })) {
+                eprintln!("error sending packet: {}", err);
+            }
+        }
+    }
+
+    render_messages(&app, Some(synac));
+    render_users(&app,    Some(synac));
+}
 pub(crate) fn render_servers(app: &Rc<App>) {
     for child in app.servers.get_children() {
         app.servers.remove(&child);
@@ -177,6 +218,17 @@ pub(crate) fn render_servers(app: &Rc<App>) {
                     render_channels(&app_clone, Some(synac));
                     app_clone.connections.set_current(Some(addr));
                     app_clone.message_edit.set_reveal_child(false);
+
+                    let channel_id = {
+                        let mut channels: Vec<_> = synac.state.channels.values().collect();
+                        channels.sort_by_key(|channel| &channel.name);
+
+                        channels.first().map(|channel| channel.id)
+                    };
+
+                    if let Some(channel_id) = channel_id {
+                        select_channel(&app_clone, synac, channel_id);
+                    }
                 }
             });
             if err {
@@ -271,36 +323,7 @@ pub(crate) fn render_channels(app: &Rc<App>, synac: Option<&mut Synac>) {
                     if result.is_err() { return; }
                     let synac = result.unwrap();
 
-                    // Assume all to be sure.
-                    let mut mode = common::PERM_ALL;
-
-                    if let Some(channel) = synac.state.channels.get(&channel_id) {
-                        if let Some(user) = synac.state.users.get(&synac.user) {
-                            mode = synac::get_mode(channel, user);
-                        }
-                    }
-
-                    app_clone.message_input.set_reveal_child(mode & common::PERM_WRITE == common::PERM_WRITE);
-
-                    synac.current_channel = Some(channel_id);
-                    app_clone.channel_name.set_text(&name);
-
-                    if mode & common::PERM_READ != common::PERM_READ {
-                        alert(&app_clone.window, MessageType::Info, "You don't have the read permission for this channel");
-                    } else {
-                        if !synac.messages.has(channel_id) {
-                            if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
-                                after: None,
-                                before: None,
-                                channel: channel_id,
-                                limit: common::LIMIT_BULK
-                            })) {
-                                eprintln!("error sending packet: {}", err);
-                            }
-                        }
-                    }
-                    render_messages(&app_clone, Some(synac));
-                    render_users(&app_clone,    Some(synac));
+                    select_channel(&app_clone, synac, channel_id);
                 });
 
                 // Wait until messages are properly rendered
