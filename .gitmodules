@@ -1,0 +1,3 @@
+[submodule "pulldown-cmark-patch"]
+	path = pulldown-cmark-patch
+	url = git@github.com:synac-chat/pulldown-cmark.git

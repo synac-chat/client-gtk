@@ -490,10 +490,15 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                     msgbox.add(&authorbox);
                 }
 
-                let string = String::from_utf8_lossy(&msg.text).into_owned();
-                let text = Label::new(&*string);
+                let string = Rc::new(String::from_utf8_lossy(&msg.text).into_owned());
+
+                let mut output = String::with_capacity(string.len());
+                md_html::push_html(&mut output, MDParser::new(&string));
+
+                let text = Label::new(None);
                 text.set_line_wrap(true);
                 text.set_line_wrap_mode(WrapMode::WordChar);
+                text.set_markup(&output);
                 text.set_selectable(true);
                 text.set_xalign(0.0);
 
@@ -512,7 +517,7 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                         let edit = MenuItem::new_with_label("Edit message");
 
                         let app_clone = Rc::clone(&app_clone);
-                        let string = string.clone();
+                        let string = Rc::clone(&string);
                         edit.connect_activate(move |_| {
                             *app_clone.message_edit_id.borrow_mut() = Some(msg_id);
                             app_clone.message_edit_input.set_text(&string);
