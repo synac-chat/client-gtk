@@ -176,6 +176,60 @@ pub(crate) fn render_servers(app: &Rc<App>) {
                 app_clone.connections.set_current(Some(addr));
                 app_clone.message_edit.set_reveal_child(false);
                 render_channels(Some(addr), &app_clone);
+
+                app_clone.connections.execute(addr, |result| {
+                    if result.is_err() { return; }
+                    let synac = result.unwrap();
+
+                    let mut channel_list: Vec<_> = synac.state.channels.values().collect();
+                    channel_list.sort_by_key(|channel| &channel.name);
+
+                    let channel_id = channel_list[0].id;
+                    let name = &channel_list[0].name;
+
+                    // Assume all to be sure.
+                    let mut mode = common::PERM_ALL;
+
+                    if let Some(channel) = synac.state.channels.get(&channel_id) {
+                        if let Some(user) = synac.state.users.get(&synac.user) {
+                            mode = synac::get_mode(channel, user);
+                        }
+                    }
+
+                    app_clone.message_input.set_reveal_child(mode & common::PERM_WRITE == common::PERM_WRITE);
+
+                    synac.current_channel = Some(channel_id);
+                    app_clone.channel_name.set_text(&name);
+
+                    if mode & common::PERM_READ != common::PERM_READ {
+                        alert(&app_clone.window, MessageType::Info, "You don't have the read permission for this channel");
+                        return;
+                    }
+
+                    if !synac.messages.has(channel_id) {
+                        if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
+                            after: None,
+                            before: None,
+                            channel: channel_id,
+                            limit: common::LIMIT_BULK
+                        })) {
+                            eprintln!("error sending packet: {}", err);
+                        }
+                    }
+                });
+                render_messages(Some(addr), &app_clone);
+                render_users(Some(addr), &app_clone);
+
+                // Wait until messages are properly rendered
+
+                let app_clone = Rc::clone(&app_clone);
+                gtk::idle_add(move || {
+                    if let Some(vadjustment) = app_clone.messages_scroll.get_vadjustment() {
+                        vadjustment.set_value(vadjustment.get_upper());
+                    }
+                    // Only do this once.
+                    Continue(false)
+                });
             } else {
                 connect(&app_clone, addr, (*hash_clone).clone(), (*token_clone).clone());
             }
