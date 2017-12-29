@@ -1,5 +1,4 @@
 use chrono::prelude::*;
-use linkify::{LinkFinder, LinkKind};
 use pulldown_cmark::{html as md_html, Parser as MDParser};
 use std::collections::HashMap;
 use std::fmt::Write;

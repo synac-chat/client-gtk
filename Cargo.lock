@@ -108,7 +108,6 @@ dependencies = [
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gdk 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "gtk 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "linkify 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "notify-rust 3.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pango 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pulldown-cmark 0.1.0",
