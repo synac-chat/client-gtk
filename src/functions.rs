@@ -82,9 +82,10 @@ pub(crate) fn connect(app: &Rc<App>, addr: SocketAddr, hash: String, token: Opti
 }
 pub(crate) fn deselect_server(app: &Rc<App>) {
     app.connections.set_current(None);
-    app.server_name.set_text("");
     app.message_edit.set_reveal_child(false);
     app.message_input.set_reveal_child(false);
+    app.server_name.set_text("");
+    app.typing.set_text("");
     render_channels(app, None);
 }
 pub(crate) fn render_mode(container: &GtkBox, bitmask: u8) {
@@ -159,6 +160,7 @@ pub(crate) fn select_channel(app: &Rc<App>, synac: &mut Synac, channel_id: usize
 
     synac.current_channel = Some(channel_id);
     app.channel_name.set_text(&channel_name);
+    app.typing.set_text("");
 
     if mode & common::PERM_READ != common::PERM_READ {
         alert(&app.window, MessageType::Info, "You don't have the read permission for this channel");
