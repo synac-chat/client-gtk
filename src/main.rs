@@ -2,7 +2,6 @@
 extern crate chrono;
 extern crate gdk;
 extern crate gtk;
-extern crate linkify;
 extern crate notify_rust;
 extern crate pango;
 extern crate pulldown_cmark;
@@ -16,9 +15,6 @@ mod messages;
 mod parser;
 mod typing;
 
-use failure::Error;
-use gdk::Screen;
-use gtk::prelude::*;
 use gtk::{
     Align,
     Box as GtkBox,
@@ -55,7 +51,10 @@ use gtk::{
     WindowType
 };
 use connections::{Connections, Synac};
+use failure::Error;
 use functions::*;
+use gdk::Screen;
+use gtk::prelude::*;
 use notify_rust::Notification;
 use pango::WrapMode;
 use rusqlite::Connection as SqlConnection;
@@ -480,6 +479,37 @@ fn main() {
     let typing_duration = Duration::from_secs(common::TYPING_TIMEOUT as u64 / 2); // TODO: const fn
     let typing_last = RefCell::new(Instant::now());
 
+    let app_clone = Rc::clone(&app);
+    input.connect_key_press_event(move |_, event| {
+        if event.get_keyval() != 65362 {
+            // hardcoded value because gdk::enums::key::uparrow doesn't work
+            return Inhibit(false);
+        }
+        if let Some(addr) = *app_clone.connections.current_server.lock().unwrap() {
+            app_clone.connections.execute(addr, |result| {
+                if result.is_err() { return; }
+                let synac = result.unwrap();
+
+                if synac.current_channel.is_none() { return; }
+                let channel = synac.current_channel.unwrap();
+
+                if let Some(msg) = synac.messages.get(channel).iter().rev().find(|msg| msg.author == synac.user) {
+                    *app_clone.message_edit_id.borrow_mut() = Some(msg.id);
+                    app_clone.message_edit_input.set_text(&*String::from_utf8_lossy(&msg.text));
+                    app_clone.message_edit.set_reveal_child(true);
+
+                    // Wait until up arrow has been processed and then refocus
+
+                    let app_clone = Rc::clone(&app_clone);
+                    gtk::idle_add(move || {
+                        app_clone.message_edit_input.grab_focus();
+                        Continue(false)
+                    });
+                }
+            });
+        }
+        Inhibit(false)
+    });
     let app_clone = Rc::clone(&app);
     input.connect_property_text_notify(move |_| {
         let mut typing_last = typing_last.borrow_mut();
