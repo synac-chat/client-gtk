@@ -121,6 +121,7 @@ impl Connections {
                     session.set_nonblocking(true)?;
                     return Ok(Synac::new(addr, session, login.id));
                 },
+                Packet::Err(common::ERR_UNKNOWN_USER) |
                 Packet::Err(common::ERR_LOGIN_INVALID) => {},
                 packet => return Err(ConnectionError::InvalidPacket(packet).into())
             }
