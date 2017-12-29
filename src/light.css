@@ -14,7 +14,7 @@ label.time {
 button.add {
     background: #56486d;
 }
-button:not(.add), button:not(.icon) {
+button:not(.add):not(.icon) {
     background: #a8a8a8;
     color: #161616;
 }
