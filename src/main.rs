@@ -317,7 +317,7 @@ fn main() {
     render_servers(&app);
     servers_wrapper.add(&app.servers);
 
-    let add = Button::new_with_label("Add...");
+    let add = Button::new_with_mnemonic("_A_dd...");
     add_class(&add, "add");
     add.set_valign(Align::End);
     add.set_vexpand(true);
@@ -463,7 +463,7 @@ fn main() {
 
     message_edit.add(&app.message_edit_input);
 
-    let message_edit_cancel = Button::new_with_label("Cancel");
+    let message_edit_cancel = Button::new_with_mnemonic("_C_ancel");
     let app_clone = Rc::clone(&app);
     message_edit_cancel.connect_clicked(move |_| {
         app_clone.message_edit.set_reveal_child(false);
@@ -615,14 +615,14 @@ fn main() {
 
     let edit_server_controls = GtkBox::new(Orientation::Horizontal, 2);
 
-    let edit_server_cancel = Button::new_with_label("Cancel");
+    let edit_server_cancel = Button::new_with_mnemonic("_C_ancel");
     let app_clone = Rc::clone(&app);
     edit_server_cancel.connect_clicked(move |_| {
         app_clone.stack.set_visible_child(&app_clone.stack_main);
     });
     edit_server_controls.add(&edit_server_cancel);
 
-    let edit_server_ok = Button::new_with_label("Ok");
+    let edit_server_ok = Button::new_with_mnemonic("_O_k");
 
     let app_clone = Rc::clone(&app);
     edit_server_ok.connect_clicked(move |_| {
@@ -668,14 +668,14 @@ fn main() {
 
     let edit_channel_controls = GtkBox::new(Orientation::Horizontal, 2);
 
-    let edit_channel_cancel = Button::new_with_label("Cancel");
+    let edit_channel_cancel = Button::new_with_mnemonic("_C_ancel");
     let app_clone = Rc::clone(&app);
     edit_channel_cancel.connect_clicked(move |_| {
         app_clone.stack.set_visible_child(&app_clone.stack_main);
     });
     edit_channel_controls.add(&edit_channel_cancel);
 
-    let edit_channel_ok = Button::new_with_label("Ok");
+    let edit_channel_ok = Button::new_with_mnemonic("_O_k");
 
     let app_clone = Rc::clone(&app);
     edit_channel_ok.connect_clicked(move |_| {
@@ -736,7 +736,7 @@ fn main() {
 
     let edit_user_controls = GtkBox::new(Orientation::Horizontal, 2);
 
-    let edit_user_cancel = Button::new_with_label("Cancel");
+    let edit_user_cancel = Button::new_with_mnemonic("_C_ancel");
 
     let app_clone = Rc::clone(&app);
     edit_user_cancel.connect_clicked(move |_| {
@@ -745,7 +745,7 @@ fn main() {
 
     edit_user_controls.add(&edit_user_cancel);
 
-    let edit_user_ok = Button::new_with_label("Ok");
+    let edit_user_ok = Button::new_with_mnemonic("_O_k");
 
     let app_clone = Rc::clone(&app);
     edit_user_ok.connect_clicked(move |_| {

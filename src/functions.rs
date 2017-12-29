@@ -518,13 +518,14 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                     if msg_mine {
                         has_perms = true;
 
-                        let edit = MenuItem::new_with_label("Edit message");
+                        let edit = MenuItem::new_with_mnemonic("_E_dit message");
 
                         let app_clone = Rc::clone(&app_clone);
                         let string = Rc::clone(&string);
                         edit.connect_activate(move |_| {
                             *app_clone.message_edit_id.borrow_mut() = Some(msg_id);
                             app_clone.message_edit_input.set_text(&string);
+                            app_clone.message_edit_input.grab_focus();
                             app_clone.message_edit.set_reveal_child(true);
                         });
 
@@ -547,7 +548,7 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                     }
 
                     if has_perms {
-                        let delete = MenuItem::new_with_label("Delete message");
+                        let delete = MenuItem::new_with_mnemonic("_D_elete message");
 
                         let app_clone = Rc::clone(&app_clone);
                         delete.connect_activate(move |_| {
