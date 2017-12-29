@@ -78,19 +78,6 @@ pub fn format_timestamp(output: &mut String, timestamp: i64) {
     output.push_str(if is_pm { "PM" } else { "AM" });
 }
 pub fn markdown(input: &str) -> String {
-    let mut output = input.to_string();
-
-    let mut finder = LinkFinder::new();
-    finder.kinds(&[LinkKind::Url]);
-    let mut added = 0;
-
-    for link in finder.links(&input) {
-        output.insert(added + link.end(), '>');
-        output.insert(added + link.start(), '<');
-        added += 1 + 1;
-    }
-
-    let input = output;
     let mut output = String::with_capacity(input.len());
     md_html::push_html(&mut output, MDParser::new(&input));
 
