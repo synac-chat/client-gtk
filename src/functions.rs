@@ -248,10 +248,12 @@ pub(crate) fn render_servers(app: &Rc<App>) {
                 }
             });
             if err {
-                connect(&app_clone, addr, (*hash_clone).clone(), (*token_clone).clone());
+                err = connect(&app_clone, addr, (*hash_clone).clone(), (*token_clone).clone()).is_some();
                 render_channels(&app_clone, None);
             }
-            app_clone.server_name.set_text(&name_clone);
+            if !err {
+                app_clone.server_name.set_text(&name_clone);
+            }
         });
 
         let app_clone = Rc::clone(app);
