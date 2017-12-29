@@ -5,7 +5,7 @@ window {
 entry {
     color: #D0D9DD;
 }
-.bold, .author {
+label.bold, label.author {
     font-weight: bold;
 }
 label.time {

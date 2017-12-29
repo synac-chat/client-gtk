@@ -108,6 +108,7 @@ struct App {
     message_edit_input: Entry,
     message_input: Revealer,
     messages: GtkBox,
+    messages_noread: Revealer,
     messages_scroll: ScrolledWindow,
     server_name: Label,
     servers: GtkBox,
@@ -202,6 +203,7 @@ fn main() {
         message_edit_input: Entry::new(),
         message_input: Revealer::new(),
         messages: GtkBox::new(Orientation::Vertical, 3),
+        messages_noread: Revealer::new(),
         messages_scroll: ScrolledWindow::new(None, None),
         server_name: Label::new(""),
         servers: GtkBox::new(Orientation::Vertical, 2),
@@ -242,6 +244,7 @@ fn main() {
     app.channel_add.set_transition_type(RevealerTransitionType::SlideUp);
     app.message_edit.set_transition_type(RevealerTransitionType::SlideUp);
     app.message_input.set_transition_type(RevealerTransitionType::SlideUp);
+    app.messages_noread.set_transition_type(RevealerTransitionType::SlideDown);
     app.stack.set_transition_type(StackTransitionType::SlideLeftRight);
     app.user_stack.set_transition_type(StackTransitionType::Crossfade);
     app.users_revealer.set_transition_type(RevealerTransitionType::SlideLeft);
@@ -390,6 +393,12 @@ fn main() {
 
     content.add(&header);
     content.add(&Separator::new(Orientation::Vertical));
+
+    let noread = Label::new("You do not have the read permission in this channel");
+    add_class(&noread, "warning");
+    app.messages_noread.add(&noread);
+
+    content.add(&app.messages_noread);
 
     app.messages.set_valign(Align::End);
     app.messages.set_vexpand(true);

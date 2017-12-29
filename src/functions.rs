@@ -162,9 +162,8 @@ pub(crate) fn select_channel(app: &Rc<App>, synac: &mut Synac, channel_id: usize
     app.channel_name.set_text(&channel_name);
     app.typing.set_text("");
 
-    if mode & common::PERM_READ != common::PERM_READ {
-        alert(&app.window, MessageType::Info, "You don't have the read permission for this channel");
-    } else {
+    app.messages_noread.set_reveal_child(mode & common::PERM_READ != common::PERM_READ);
+    if mode & common::PERM_READ == common::PERM_READ {
         if !synac.messages.has(channel_id) {
             if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
                 after: None,
