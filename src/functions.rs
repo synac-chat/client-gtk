@@ -479,8 +479,6 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                     add_class(&author, "author");
                     authorbox.add(&author);
 
-                    authorbox.add(&Separator::new(Orientation::Horizontal));
-
                     let mut time = String::with_capacity(32); // just a guess
                     messages::format_timestamp(&mut time, msg.timestamp);
                     if let Some(edit) = msg.timestamp_edit {
