@@ -188,6 +188,7 @@ fn main() {
     let window = Window::new(WindowType::Toplevel);
     window.set_title("Synac GTK+ client");
     window.set_default_size(1152, 648);
+    window.set_position(gtk::WindowPosition::Center);
 
     let radio_none = RadioButton::new_with_label("Inherit channel's mode");
     let radio_some = RadioButton::new_with_label_from_widget(&radio_none, "Use custom mode:");
