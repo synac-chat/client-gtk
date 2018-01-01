@@ -11,6 +11,9 @@ label.bold, label.author {
 label.time {
     color: #828282;
 }
+button {
+    font-weight: normal;
+}
 button.add {
     background: #56486d;
 }
