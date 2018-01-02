@@ -737,14 +737,16 @@ fn main() {
                             default_mode_bot: get_mode(&app_clone.stack_edit_channel.mode_bots).unwrap(),
                             default_mode_user: get_mode(&app_clone.stack_edit_channel.mode_users).unwrap(),
                             id: channel,
-                            name: name
+                            name: name,
+                            private: false
                         }
                     })
                 } else {
                     Packet::ChannelCreate(common::ChannelCreate {
                         default_mode_bot: get_mode(&app_clone.stack_edit_channel.mode_bots).unwrap(),
                         default_mode_user: get_mode(&app_clone.stack_edit_channel.mode_users).unwrap(),
-                        name: name
+                        name: name,
+                        recipient: None
                     })
                 };
 
