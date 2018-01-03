@@ -103,6 +103,7 @@ struct App {
     channel_add: Revealer,
     channel_name: Label,
     channels: GtkBox,
+    channels_priv: GtkBox,
     message_edit: Revealer,
     message_edit_id: RefCell<Option<usize>>,
     message_edit_input: Entry,
@@ -197,6 +198,7 @@ fn main() {
         channel_add: Revealer::new(),
         channel_name: Label::new(""),
         channels: GtkBox::new(Orientation::Vertical, 2),
+        channels_priv: GtkBox::new(Orientation::Vertical, 2),
         connections: Connections::new(&db, nick),
         db: Rc::new(db),
         message_edit: Revealer::new(),
@@ -318,7 +320,10 @@ fn main() {
     servers_wrapper.add(&Separator::new(Orientation::Vertical));
 
     render_servers(&app);
-    servers_wrapper.add(&app.servers);
+    let scroll = ScrolledWindow::new(None, None);
+    scroll.set_vexpand(true);
+    scroll.add(&app.servers);
+    servers_wrapper.add(&scroll);
 
     let add = Button::new_with_mnemonic("Add _Server");
     add_class(&add, "add");
@@ -349,12 +354,21 @@ fn main() {
 
     channels_wrapper.add(&Separator::new(Orientation::Vertical));
 
-    channels_wrapper.add(&app.channels);
+    let scroll = ScrolledWindow::new(None, None);
+    scroll.set_vexpand(true);
+    scroll.add(&app.channels);
+    channels_wrapper.add(&scroll);
+
+    channels_wrapper.add(&Separator::new(Orientation::Vertical));
+    channels_wrapper.add(&Label::new("Private channels:"));
+
+    let scroll = ScrolledWindow::new(None, None);
+    scroll.set_vexpand(true);
+    scroll.add(&app.channels_priv);
+    channels_wrapper.add(&scroll);
 
     let add = Button::new_with_mnemonic("Add _Channel");
     add_class(&add, "add");
-    add.set_valign(Align::End);
-    add.set_vexpand(true);
 
     let app_clone = Rc::clone(&app);
     add.connect_clicked(move |_| {

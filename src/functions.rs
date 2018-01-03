@@ -148,8 +148,16 @@ pub(crate) fn select_channel(app: &Rc<App>, synac: &mut Synac, channel_id: usize
 
     if let Some(channel) = synac.state.channels.get(&channel_id) {
         channel_name.reserve(1 + channel.name.len());
-        channel_name.push('#');
-        channel_name.push_str(&channel.name);
+        if channel.private {
+            if let Some(recipient) = synac.state.get_recipient_unchecked(channel.id, synac.user) {
+                channel_name.push_str(&recipient.name);
+            } else {
+                channel_name.push_str("unknown");
+            }
+        } else {
+            channel_name.push('#');
+            channel_name.push_str(&channel.name);
+        }
 
         if let Some(user) = synac.state.users.get(&synac.user) {
             mode = synac::get_mode(channel, user);
@@ -238,7 +246,7 @@ pub(crate) fn render_servers(app: &Rc<App>) {
                         let mut channels: Vec<_> = synac.state.channels.values().collect();
                         channels.sort_by_key(|channel| &channel.name);
 
-                        channels.first().map(|channel| channel.id)
+                        channels.iter().find(|channel| !channel.private).map(|channel| channel.id)
                     };
 
                     if let Some(channel_id) = channel_id {
@@ -321,6 +329,9 @@ pub(crate) fn render_channels(app: &Rc<App>, synac: Option<&mut Synac>) {
     for child in app.channels.get_children() {
         app.channels.remove(&child);
     }
+    for child in app.channels_priv.get_children() {
+        app.channels_priv.remove(&child);
+    }
     if let Some(synac) = synac {
         let addr = synac.addr;
 
@@ -328,13 +339,21 @@ pub(crate) fn render_channels(app: &Rc<App>, synac: Option<&mut Synac>) {
         channel_list.sort_by_key(|channel| &channel.name);
 
         for channel in channel_list {
+            let channel_id = channel.id;
+
             let mut name = String::with_capacity(channel.name.len() + 1);
-            name.push('#');
-            name.push_str(&channel.name);
+            if channel.private {
+                if let Some(recipient) = synac.state.get_recipient_unchecked(channel.id, synac.user) {
+                    name.push_str(&recipient.name);
+                } else {
+                    name.push_str("unknown");
+                }
+            } else {
+                name.push('#');
+                name.push_str(&channel.name);
+            }
 
             let button = Button::new_with_label(&name);
-
-            let channel_id = channel.id;
 
             let app_clone = Rc::clone(app);
             button.connect_clicked(move |_| {
@@ -439,7 +458,12 @@ pub(crate) fn render_channels(app: &Rc<App>, synac: Option<&mut Synac>) {
                 }
                 Inhibit(false)
             });
-            app.channels.add(&button);
+
+            if channel.private {
+                app.channels_priv.add(&button);
+            } else {
+                app.channels.add(&button);
+            }
         }
 
         if let Some(user) = synac.state.users.get(&synac.user) {
@@ -454,6 +478,8 @@ pub(crate) fn render_channels(app: &Rc<App>, synac: Option<&mut Synac>) {
 
     app.channels.show_all();
     app.channels.queue_draw();
+    app.channels_priv.show_all();
+    app.channels_priv.queue_draw();
 }
 pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
     for child in app.messages.get_children() {
@@ -732,6 +758,26 @@ pub(crate) fn render_users(app: &Rc<App>, synac: Option<&mut Synac>) {
                             }
                         }
                     }
+
+                    let message = MenuItem::new_with_label("Message");
+                    let app_clone3 = Rc::clone(&app_clone);
+                    message.connect_activate(move |_| {
+                        app_clone3.connections.execute(addr, |result| {
+                            if result.is_err() { return; }
+                            let synac = result.unwrap();
+
+                            let result = synac.session.send(&Packet::ChannelCreate(common::ChannelCreate {
+                                default_mode_bot: 0,
+                                default_mode_user: 0,
+                                name: String::new(),
+                                recipient: Some(user_id)
+                            }));
+                            if let Err(err) = result {
+                                eprintln!("failed to send packet: {}", err);
+                            }
+                        });
+                    });
+                    menu.add(&message);
 
                     menu.show_all();
                     menu.popup_at_pointer(&**event);
