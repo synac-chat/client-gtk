@@ -9,7 +9,7 @@ gdk = "0.7.0"
 notify-rust = "3.4.2"
 pango = "0.3.0"
 rusqlite = "0.13.0"
-synac = "0.5.1"
+synac = "0.5.2"
 xdg = "2.1.0"
 
 [dependencies.gtk]
