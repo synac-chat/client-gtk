@@ -279,7 +279,7 @@ fn main() {
         drop(old);
 
         app_clone.connections.foreach(|synac| {
-            let result = synac.session.send(&Packet::LoginUpdate(common::LoginUpdate {
+            let result = synac.session.write(&Packet::LoginUpdate(common::LoginUpdate {
                 name: Some(text.clone()),
                 password_current: None,
                 password_new: None,
@@ -439,7 +439,7 @@ fn main() {
                     if let Some(channel) = synac.current_channel {
                         println!("requesting more messages");
 
-                        if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
+                        if let Err(err) = synac.session.write(&Packet::MessageList(common::MessageList {
                             after: None,
                             before: synac.messages.get(channel).first().map(|msg| msg.id),
                             channel: channel,
@@ -472,7 +472,7 @@ fn main() {
                 }
                 let synac = result.unwrap();
 
-                if let Err(err) = synac.session.send(&Packet::MessageUpdate(common::MessageUpdate {
+                if let Err(err) = synac.session.write(&Packet::MessageUpdate(common::MessageUpdate {
                     id: app_clone.message_edit_id.borrow().expect("wait how is this variable not set"),
                     text: text.into_bytes()
                 })) {
@@ -546,7 +546,7 @@ fn main() {
             app_clone.connections.execute(addr, |result| {
                 if let Ok(synac) = result {
                     if let Some(channel) = synac.current_channel {
-                        if let Err(err) = synac.session.send(&Packet::Typing(common::Typing {
+                        if let Err(err) = synac.session.write(&Packet::Typing(common::Typing {
                             channel: channel
                         })) {
                             eprintln!("failed to send packet: {}", err);
@@ -591,7 +591,7 @@ fn main() {
                         return;
                     }
 
-                    let result = synac.session.send(&Packet::Command(common::Command {
+                    let result = synac.session.write(&Packet::Command(common::Command {
                         args: args,
                         recipient: user_id.unwrap()
                     }));
@@ -605,7 +605,7 @@ fn main() {
                     return;
                 }
                 let channel = synac.current_channel.unwrap();
-                let result = synac.session.send(&Packet::MessageCreate(common::MessageCreate {
+                let result = synac.session.write(&Packet::MessageCreate(common::MessageCreate {
                     channel: channel,
                     text: text.into_bytes()
                 }));
@@ -764,7 +764,7 @@ fn main() {
                     })
                 };
 
-                if let Err(err) = synac.session.send(&packet) {
+                if let Err(err) = synac.session.write(&packet) {
                     eprintln!("error sending packet: {}", err);
                 }
             });
@@ -819,7 +819,7 @@ fn main() {
                     Some(get_mode(&app_clone.stack_edit_user.mode).unwrap())
                 };
 
-                let result = synac.session.send(&Packet::UserUpdate(common::UserUpdate {
+                let result = synac.session.write(&Packet::UserUpdate(common::UserUpdate {
                     admin: None,
                     ban: None,
                     channel_mode: Some((channel, mode)),

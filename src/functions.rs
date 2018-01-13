@@ -173,7 +173,7 @@ pub(crate) fn select_channel(app: &Rc<App>, synac: &mut Synac, channel_id: usize
     app.messages_noread.set_reveal_child(mode & common::PERM_READ != common::PERM_READ);
     if mode & common::PERM_READ == common::PERM_READ {
         if !synac.messages.has(channel_id) {
-            if let Err(err) = synac.session.send(&Packet::MessageList(common::MessageList {
+            if let Err(err) = synac.session.write(&Packet::MessageList(common::MessageList {
                 after: None,
                 before: None,
                 channel: channel_id,
@@ -413,7 +413,7 @@ pub(crate) fn render_channels(app: &Rc<App>, synac: Option<&mut Synac>) {
                                 if result.is_err() { return; }
                                 let synac = result.unwrap();
 
-                                let result = synac.session.send(&Packet::ChannelDelete(common::ChannelDelete {
+                                let result = synac.session.write(&Packet::ChannelDelete(common::ChannelDelete {
                                     id: channel_id
                                 }));
                                 if let Err(err) = result {
@@ -583,7 +583,7 @@ pub(crate) fn render_messages(app: &Rc<App>, synac: Option<&mut Synac>) {
                                 if result.is_err() { return; }
                                 let synac = result.unwrap();
 
-                                let result = synac.session.send(&Packet::MessageDelete(common::MessageDelete {
+                                let result = synac.session.write(&Packet::MessageDelete(common::MessageDelete {
                                     id: msg_id
                                 }));
                                 if let Err(err) = result {
@@ -705,7 +705,7 @@ pub(crate) fn render_users(app: &Rc<App>, synac: Option<&mut Synac>) {
                                     if result.is_err() { return; }
                                     let synac = result.unwrap();
 
-                                    let result = synac.session.send(&Packet::UserUpdate(common::UserUpdate {
+                                    let result = synac.session.write(&Packet::UserUpdate(common::UserUpdate {
                                         admin: Some(!other_admin),
                                         ban: None,
                                         channel_mode: None,
@@ -740,7 +740,7 @@ pub(crate) fn render_users(app: &Rc<App>, synac: Option<&mut Synac>) {
                                                 if result.is_err() { return; }
                                                 let synac = result.unwrap();
 
-                                                let result = synac.session.send(&Packet::UserUpdate(common::UserUpdate {
+                                                let result = synac.session.write(&Packet::UserUpdate(common::UserUpdate {
                                                     admin: None,
                                                     ban: Some(!other_ban),
                                                     channel_mode: None,
@@ -766,7 +766,7 @@ pub(crate) fn render_users(app: &Rc<App>, synac: Option<&mut Synac>) {
                             if result.is_err() { return; }
                             let synac = result.unwrap();
 
-                            let result = synac.session.send(&Packet::ChannelCreate(common::ChannelCreate {
+                            let result = synac.session.write(&Packet::ChannelCreate(common::ChannelCreate {
                                 default_mode_bot: 0,
                                 default_mode_user: 0,
                                 name: String::new(),
