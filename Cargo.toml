@@ -8,7 +8,7 @@ failure = "0.1.1"
 gdk = "0.7.0"
 notify-rust = "3.4.2"
 pango = "0.3.0"
-rusqlite = "0.13.0"
+rusqlite = "0.14"
 synac = "0.6.1"
 xdg = "2.1.0"
 
